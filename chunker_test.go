@@ -35,12 +35,14 @@ func newSha256(path string) func(t *testing.T) []byte {
 
 var sekienSha256 = newSha256("fixtures/SekienAkashita.jpg")
 
-func ExampleSplit() {
+func Example_basic() {
 	file, _ := os.Open("fixtures/SekienAkashita.jpg")
+	defer file.Close()
 
-	chunker, _ := NewFastCDC(context.Background(), With32kChunks())
+	chunker, _ := New(context.Background(), With32kChunks(), WithBufferSize(10*1024*1024))
 
 	_ = chunker.Split(file, func(offset, length uint, chunk []byte) error {
+		// the chunk is only valid in the callback, copy it for later use
 		fmt.Printf("offset: %d, length: %d, sum: %x\n", offset, length, sha256.Sum256(chunk))
 		// Output :
 		// offset: 0, length: 32857, sum: 5a80871bad4588c7278d39707fe68b8b174b1aa54c59169d3c2c72f1e16ef46d
@@ -49,11 +51,38 @@ func ExampleSplit() {
 	})
 
 	_ = chunker.Finalize(func(offset, length uint, chunk []byte) error {
+		// the chunk is only valid in the callback, copy it for later use
 		fmt.Printf("offset: %d, length: %d, sum: %x\n", offset, length, sha256.Sum256(chunk))
 		// Output :
 		// offset: 49265, length: 60201, sum: 0fe7305ba21a5a5ca9f89962c5a6f3e29cd3e2b36f00e565858e0012e5f8df36
 		return nil
 	})
+}
+
+func Example_stream() {
+	file, _ := os.Open("fixtures/SekienAkashita.jpg")
+	defer file.Close()
+
+	chunker, _ := New(context.Background(), With32kChunks(), WithBufferSize(10*1024*1024))
+
+	// should be set to the same size of the chunker buffer size
+	// for optimal performance
+	buf := make([]byte, 10*1024*1024)
+	for {
+		n, err := file.Read(buf)
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+			panic(err)
+		}
+		_ = chunker.Split(bytes.NewReader(buf[:n]), func(offset, length uint, chunk []byte) error {
+			// the chunk is only valid in the callback, copy it for later use
+			fmt.Printf("offset: %d, length: %d, sum: %x\n", offset, length, sha256.Sum256(chunk))
+			return nil
+		})
+	}
+
 }
 
 func TestLogarithm2(t *testing.T) {
@@ -111,7 +140,7 @@ func TestMinus(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		got := minus(tc.Point, tc.Carry, tc.Min)
+		got := min(tc.Point, tc.Carry, tc.Min)
 		if got != tc.Result {
 			t.Errorf("want = %d, got = %d", tc.Result, got)
 		}
@@ -186,7 +215,7 @@ func TestAllZeros(t *testing.T) {
 		Length uint
 	}
 	buffer := make([]byte, 10240)
-	chunker, err := NewFastCDC(context.Background(), WithChunksSize(64, 256, 1024), WithBufferSize(1024))
+	chunker, err := New(context.Background(), WithChunksSize(64, 256, 1024), WithBufferSize(1024))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -261,7 +290,7 @@ func TestRandomInputFuzz(t *testing.T) {
 				sBufSize := uint(rand.Intn(sMax-sMin+1) + sMin)
 
 				chunks := make([]Chunk, 0)
-				chunker, err := NewFastCDC(context.Background(), tc.opt, WithBufferSize(bufSize))
+				chunker, err := New(context.Background(), tc.opt, WithBufferSize(bufSize))
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -285,7 +314,7 @@ func TestRandomInputFuzz(t *testing.T) {
 
 				file.Seek(0, 0)
 
-				chunker, err = NewFastCDC(context.Background(), WithStreamMode(), tc.opt, WithBufferSize(bufSize))
+				chunker, err = New(context.Background(), WithStreamMode(), tc.opt, WithBufferSize(bufSize))
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -399,7 +428,7 @@ func TestSekienFuzz(t *testing.T) {
 				}
 
 				chunks := make([]Chunk, 0)
-				chunker, err := NewFastCDC(context.Background(), tc.opt, WithBufferSize(bufSize))
+				chunker, err := New(context.Background(), tc.opt, WithBufferSize(bufSize))
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -423,7 +452,7 @@ func TestSekienFuzz(t *testing.T) {
 
 				file.Seek(0, 0)
 
-				chunker, err = NewFastCDC(context.Background(), WithStreamMode(), tc.opt, WithBufferSize(bufSize))
+				chunker, err = New(context.Background(), WithStreamMode(), tc.opt, WithBufferSize(bufSize))
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -518,7 +547,7 @@ func TestSekien16kChunks(t *testing.T) {
 	defer file.Close()
 
 	chunks := make([]Chunk, 0, 6)
-	chunker, err := NewFastCDC(context.Background(), WithChunksSize(8192, 16834, 32768), WithBufferSize(32768))
+	chunker, err := New(context.Background(), WithChunksSize(8192, 16834, 32768), WithBufferSize(32768))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -568,7 +597,7 @@ func TestSekien16kChunksStream(t *testing.T) {
 	defer file.Close()
 
 	chunks := make([]Chunk, 0, 6)
-	chunker, err := NewFastCDC(context.Background(), WithStreamMode(), WithChunksSize(8192, 16834, 32768), WithBufferSize(32768))
+	chunker, err := New(context.Background(), WithStreamMode(), WithChunksSize(8192, 16834, 32768), WithBufferSize(32768))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -629,7 +658,7 @@ func TestSekien16kChunksStreamWithMissingPart(t *testing.T) {
 	defer file.Close()
 
 	chunks := make([]Chunk, 0, 6)
-	chunker, err := NewFastCDC(context.Background(), WithStreamMode(), WithChunksSize(8192, 16834, 32768), WithBufferSize(32768))
+	chunker, err := New(context.Background(), WithStreamMode(), WithChunksSize(8192, 16834, 32768), WithBufferSize(32768))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -686,7 +715,7 @@ func TestSekien16kChunksHash(t *testing.T) {
 
 	sum := sekienSha256(t)
 
-	chunker, err := NewFastCDC(context.Background(), WithChunksSize(8192, 16834, 32768), WithBufferSize(32768))
+	chunker, err := New(context.Background(), WithChunksSize(8192, 16834, 32768), WithBufferSize(32768))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -720,7 +749,7 @@ func TestSekien16kChunksHashStream(t *testing.T) {
 
 	sum := sekienSha256(t)
 
-	chunker, err := NewFastCDC(context.Background(), WithStreamMode(), WithChunksSize(8192, 16834, 32768), WithBufferSize(32768))
+	chunker, err := New(context.Background(), WithStreamMode(), WithChunksSize(8192, 16834, 32768), WithBufferSize(32768))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -774,7 +803,7 @@ func TestSekien32kChunks(t *testing.T) {
 	defer file.Close()
 
 	chunks := make([]Chunk, 0, 6)
-	chunker, err := NewFastCDC(context.Background(), WithChunksSize(16384, 32768, 65536), WithBufferSize(65536))
+	chunker, err := New(context.Background(), WithChunksSize(16384, 32768, 65536), WithBufferSize(65536))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -821,7 +850,7 @@ func TestSekien32kChunksStream(t *testing.T) {
 	defer file.Close()
 
 	chunks := make([]Chunk, 0, 6)
-	chunker, err := NewFastCDC(context.Background(), WithStreamMode(), WithChunksSize(16384, 32768, 65536), WithBufferSize(65536))
+	chunker, err := New(context.Background(), WithStreamMode(), WithChunksSize(16384, 32768, 65536), WithBufferSize(65536))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -869,7 +898,7 @@ func TestSekien32kChunksHash(t *testing.T) {
 
 	sum := sekienSha256(t)
 
-	chunker, err := NewFastCDC(context.Background(), WithChunksSize(16384, 32768, 65536), WithBufferSize(65536))
+	chunker, err := New(context.Background(), WithChunksSize(16384, 32768, 65536), WithBufferSize(65536))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -903,7 +932,7 @@ func TestSekien32kChunksHashStream(t *testing.T) {
 
 	sum := sekienSha256(t)
 
-	chunker, err := NewFastCDC(context.Background(), WithStreamMode(), WithChunksSize(16384, 32768, 65536), WithBufferSize(65536))
+	chunker, err := New(context.Background(), WithStreamMode(), WithChunksSize(16384, 32768, 65536), WithBufferSize(65536))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -956,7 +985,7 @@ func TestSekien64kChunks(t *testing.T) {
 	defer file.Close()
 
 	chunks := make([]Chunk, 0, 6)
-	chunker, err := NewFastCDC(context.Background(), WithChunksSize(32768, 65536, 131_072), WithBufferSize(131_072))
+	chunker, err := New(context.Background(), WithChunksSize(32768, 65536, 131_072), WithBufferSize(131_072))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1002,7 +1031,7 @@ func TestSekien64kChunksStream(t *testing.T) {
 	defer file.Close()
 
 	chunks := make([]Chunk, 0, 6)
-	chunker, err := NewFastCDC(context.Background(), WithStreamMode(), WithChunksSize(32768, 65536, 131_072), WithBufferSize(131_072))
+	chunker, err := New(context.Background(), WithStreamMode(), WithChunksSize(32768, 65536, 131_072), WithBufferSize(131_072))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1050,7 +1079,7 @@ func TestSekien64kChunksHash(t *testing.T) {
 
 	sum := sekienSha256(t)
 
-	chunker, err := NewFastCDC(context.Background(), WithChunksSize(32768, 65536, 131_072), WithBufferSize(131_072))
+	chunker, err := New(context.Background(), WithChunksSize(32768, 65536, 131_072), WithBufferSize(131_072))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1084,7 +1113,7 @@ func TestSekien64kChunksHashStream(t *testing.T) {
 
 	sum := sekienSha256(t)
 
-	chunker, err := NewFastCDC(context.Background(), WithStreamMode(), WithChunksSize(32768, 65536, 131_072), WithBufferSize(131_072))
+	chunker, err := New(context.Background(), WithStreamMode(), WithChunksSize(32768, 65536, 131_072), WithBufferSize(131_072))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1129,7 +1158,7 @@ func TestSekienMinChunksHash(t *testing.T) {
 
 	sum := sekienSha256(t)
 
-	chunker, err := NewFastCDC(context.Background(), WithChunksSize(64, 256, 1024), WithBufferSize(1024))
+	chunker, err := New(context.Background(), WithChunksSize(64, 256, 1024), WithBufferSize(1024))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1163,7 +1192,7 @@ func TestSekienMaxChunksHash(t *testing.T) {
 
 	sum := sekienSha256(t)
 
-	chunker, err := NewFastCDC(context.Background(), WithChunksSize(67_108_864, 268_435_456, 1_073_741_824), WithBufferSize(1_073_741_824))
+	chunker, err := New(context.Background(), WithChunksSize(67_108_864, 268_435_456, 1_073_741_824), WithBufferSize(1_073_741_824))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1193,7 +1222,7 @@ func TestSmallInput(t *testing.T) {
 	rand.Seed(time.Now().UnixNano())
 	rand.Read(dataset)
 
-	chunker, err := NewFastCDC(context.Background(), With16kChunks())
+	chunker, err := New(context.Background(), With16kChunks())
 	if err != nil {
 		t.Fatal(err)
 	}

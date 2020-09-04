@@ -1,5 +1,7 @@
 # FastCDC
 
+**In development, interface may change in the future**
+
 This package implements the FastCDC content defined chunking algorithm based on the gear-rolling hash and implements optimizations proposed by Wen Xia et al. in their 2016 [paper](https://www.usenix.org/system/files/conference/atc16/atc16-paper-xia.pdf) FastCDC:
 a Fast and Efficient Content-Defined Chunking Approach for Data Deduplication.
 

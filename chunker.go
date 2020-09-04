@@ -39,8 +39,8 @@ var (
 	ErrInvalidBufferLength    = errors.New("invalid buffer length")
 )
 
-// NewFastCDC return a cancelable blazing fast chunker
-func NewFastCDC(ctx context.Context, opts ...Option) (*FastCDC, error) {
+// New return a cancelable blazing fast chunker
+func New(ctx context.Context, opts ...Option) (*FastCDC, error) {
 	config := defaultConfig()
 
 	for _, opt := range opts {
@@ -214,9 +214,9 @@ func (f *FastCDC) split(data io.Reader, fn ChunkFn, eof error) error {
 func (f *FastCDC) breakpoint(buffer []byte) (uint, bool) {
 	// if there is bytes carried from the last breakpoint call,
 	// reduce the expected chunk size to match the required size.
-	minSize := minus(f.minSize, f.carry, 1)
-	avgSize := minus(f.avgSize, f.carry, 1)
-	maxSize := minus(f.maxSize, f.carry, 1)
+	minSize := min(f.minSize, f.carry, 1)
+	avgSize := min(f.avgSize, f.carry, 1)
+	maxSize := min(f.maxSize, f.carry, 1)
 
 	bufferLength := uint(len(buffer))
 
@@ -279,10 +279,10 @@ func (f *FastCDC) breakpoint(buffer []byte) (uint, bool) {
 	return 0, false
 }
 
-// minus reduce a cut-point with the carry bytes length
-// if the carry is >= than the cut-point, minus return the
+// min reduce a cut-point with the carry bytes length
+// if the carry is >= than the cut-point, min return the
 // min acceptable cut-point.
-func minus(point, carry, min uint) uint {
+func min(point, carry, min uint) uint {
 	if carry < point {
 		return point - carry
 	}
