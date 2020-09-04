@@ -1,4 +1,4 @@
-package chunker
+package fastcdc
 
 type Option func(*config)
 

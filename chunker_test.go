@@ -1,4 +1,4 @@
-package chunker
+package fastcdc
 
 import (
 	"bytes"
@@ -216,7 +216,7 @@ func TestAllZeros(t *testing.T) {
 	}
 }
 
-func TestDeterministicChunkSize(t *testing.T) {
+func TestRandomInputFuzz(t *testing.T) {
 	tests := []struct {
 		name    string
 		minSize int
@@ -361,7 +361,7 @@ func TestDeterministicChunkSize(t *testing.T) {
 	}
 }
 
-func TestSekienDeterministicChunkSize(t *testing.T) {
+func TestSekienFuzz(t *testing.T) {
 	tests := []struct {
 		name    string
 		minSize int

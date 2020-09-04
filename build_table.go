@@ -1,4 +1,4 @@
-package chunker
+package fastcdc
 
 import (
 	"crypto/aes"
