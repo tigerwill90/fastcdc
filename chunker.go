@@ -31,6 +31,7 @@ type FastCDC struct {
 	previousBytesRead uint
 	streamMode        bool
 	firstCall         bool
+	optimization      bool
 	ctx               context.Context
 }
 
@@ -39,8 +40,8 @@ var (
 	ErrInvalidBufferLength    = errors.New("invalid buffer length")
 )
 
-// New return a cancelable blazing fast chunker
-func New(ctx context.Context, opts ...Option) (*FastCDC, error) {
+// NewChunker return a cancelable blazing fast chunker
+func NewChunker(ctx context.Context, opts ...Option) (*FastCDC, error) {
 	config := defaultConfig()
 
 	for _, opt := range opts {
@@ -88,14 +89,15 @@ func New(ctx context.Context, opts ...Option) (*FastCDC, error) {
 	maskL := mask(bits - 1)
 
 	return &FastCDC{
-		buffer:     make([]byte, config.bufferSize),
-		minSize:    config.minSize,
-		avgSize:    config.avgSize,
-		maxSize:    config.maxSize,
-		streamMode: config.stream,
-		maskS:      maskS,
-		maskL:      maskL,
-		ctx:        ctx,
+		buffer:       make([]byte, config.bufferSize),
+		minSize:      config.minSize,
+		avgSize:      config.avgSize,
+		maxSize:      config.maxSize,
+		streamMode:   config.stream,
+		maskS:        maskS,
+		maskL:        maskL,
+		optimization: config.optimization,
+		ctx:          ctx,
 	}, nil
 }
 
@@ -180,8 +182,8 @@ func (f *FastCDC) split(data io.Reader, fn ChunkFn, eof error) error {
 
 		// Find chunk for the current buffer
 		for f.offset < bytesReadWithCarry {
-			breakpoint, found := f.breakpoint(f.buffer[f.offset:bytesReadWithCarry])
-			if found {
+			breakpoint := f.breakpoint(f.buffer[f.offset:bytesReadWithCarry])
+			if breakpoint != 0 {
 				endOffset := breakpoint + f.offset
 				// If there is a carry, the length need to be calculate form the beginning of the buffer
 				chunkLength := endOffset - (f.offset - f.carry)
@@ -195,7 +197,7 @@ func (f *FastCDC) split(data io.Reader, fn ChunkFn, eof error) error {
 			} else {
 				previousCarry := f.carry
 				currentCarry := bytesReadWithCarry - f.offset
-				f.carry += bytesReadWithCarry - f.offset
+				f.carry += currentCarry
 
 				// for the length of the current carry,
 				// copy the part of the buffer where we can't find
@@ -211,7 +213,7 @@ func (f *FastCDC) split(data io.Reader, fn ChunkFn, eof error) error {
 
 // Breakpoint return the next chunk breakpoint on the buffer.
 // If there is no breakpoint found, it return 0, false.
-func (f *FastCDC) breakpoint(buffer []byte) (uint, bool) {
+func (f *FastCDC) breakpoint(buffer []byte) uint {
 	// if there is bytes carried from the last breakpoint call,
 	// reduce the expected chunk size to match the required size.
 	minSize := min(f.minSize, f.carry, 1)
@@ -224,7 +226,7 @@ func (f *FastCDC) breakpoint(buffer []byte) (uint, bool) {
 
 	// Sub-minimum chunk cut-point skipping
 	if bufferLength <= minSize {
-		return 0, false
+		return 0
 	}
 
 	// Set to min size since we do not want to
@@ -240,7 +242,15 @@ func (f *FastCDC) breakpoint(buffer []byte) (uint, bool) {
 		bufferLength = maxSize
 	}
 
-	normalSize := normalSize(avgSize, minSize, bufferLength)
+	normalSize := avgSize
+
+	if f.optimization {
+		normalSize = centerSize(avgSize, minSize, bufferLength)
+	} else {
+		if bufferLength <= avgSize {
+			normalSize = bufferLength
+		}
+	}
 
 	// Start by using the "harder" chunking judgement to find
 	// chunks that run smaller than the desired normal size.
@@ -249,7 +259,7 @@ func (f *FastCDC) breakpoint(buffer []byte) (uint, bool) {
 		breakPoint += 1
 		hash = (hash >> 1) + table[index]
 		if hash&f.maskS == 0 {
-			return breakPoint, true
+			return breakPoint
 		}
 	}
 
@@ -261,7 +271,7 @@ func (f *FastCDC) breakpoint(buffer []byte) (uint, bool) {
 		breakPoint += 1
 		hash = (hash >> 1) + table[index]
 		if hash&f.maskL == 0 {
-			return breakPoint, true
+			return breakPoint
 		}
 	}
 
@@ -271,12 +281,12 @@ func (f *FastCDC) breakpoint(buffer []byte) (uint, bool) {
 	// the max size allowed and we should emit.
 	// It's also ensure than the carry is never bigger than the max size.
 	if breakPoint == maxSize {
-		return breakPoint, true
+		return breakPoint
 	}
 
 	// If the breakPoint is < maxSize, the buffer we got is too small to find a chunk
 	// and we should try with a bigger buffer.
-	return 0, false
+	return 0
 }
 
 // min reduce a cut-point with the carry bytes length
@@ -294,7 +304,7 @@ func min(point, carry, min uint) uint {
 // threshold based on a combination of average and minimum chunk size
 // to decide the pivot point at which to switch masks.
 // https://github.com/ronomon/deduplication#content-dependent-chunking
-func normalSize(average, minimum, sourceSize uint) uint {
+func centerSize(average, minimum, sourceSize uint) uint {
 	offset := minimum + ceilDiv(minimum, 2)
 	if offset > average {
 		offset = average

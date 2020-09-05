@@ -3,11 +3,12 @@ package fastcdc
 type Option func(*config)
 
 type config struct {
-	bufferSize uint
-	minSize    uint
-	avgSize    uint
-	maxSize    uint
-	stream     bool
+	bufferSize   uint
+	minSize      uint
+	avgSize      uint
+	maxSize      uint
+	stream       bool
+	optimization bool
 }
 
 func defaultConfig() *config {
@@ -56,7 +57,7 @@ func With32kChunks() Option {
 	}
 }
 
-// Set the 64k average chunks size preset.
+// With64kChunks set the 64k average chunks size preset.
 // It's the default and recommended chunks size
 // for optimal end-to-end deduplication and compression.
 // https://www.usenix.org/system/files/conference/atc12/atc12-final293.pdf
@@ -68,9 +69,19 @@ func With64kChunks() Option {
 	}
 }
 
-// Set the chunker in stream mode.
+// WithStreamMode set the chunker in stream mode.
 func WithStreamMode() Option {
 	return func(c *config) {
 		c.stream = true
+	}
+}
+
+// WithAdaptiveThreshold activate adaptive threshold optimization.
+// A larger minimum chunk size now switches from the strict mask to the eager mask earlier.
+// When active, the chunking output will vary depending of the internal buffer size so you
+// need to stick with a predefined size in order to get deterministic chunk length.
+func WithAdaptiveThreshold() Option {
+	return func(c *config) {
+		c.optimization = true
 	}
 }
