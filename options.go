@@ -3,19 +3,21 @@ package fastcdc
 type Option func(*config)
 
 type config struct {
-	bufferSize   uint
-	minSize      uint
-	avgSize      uint
-	maxSize      uint
-	stream       bool
-	optimization bool
+	bufferSize    uint
+	minSize       uint
+	avgSize       uint
+	maxSize       uint
+	stream        bool
+	optimization  bool
+	normalization uint
 }
 
 func defaultConfig() *config {
 	return &config{
-		minSize: 32_768,
-		avgSize: 65_536,
-		maxSize: 131_072,
+		minSize:       32_768,
+		avgSize:       65_536,
+		maxSize:       131_072,
+		normalization: 1,
 	}
 }
 
@@ -84,5 +86,11 @@ func WithStreamMode() Option {
 func WithAdaptiveThreshold() Option {
 	return func(c *config) {
 		c.optimization = true
+	}
+}
+
+func With2bitsNormalization() Option {
+	return func(c *config) {
+		c.normalization = 2
 	}
 }

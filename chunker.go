@@ -99,8 +99,9 @@ func NewChunker(ctx context.Context, opts ...Option) (*FastCDC, error) {
 	}
 
 	bits := logarithm2(config.avgSize)
-	maskS := mask(bits + 1)
-	maskL := mask(bits - 1)
+	// By default, mask use 1 bits normalization.
+	maskS := mask(bits + config.normalization)
+	maskL := mask(bits - config.normalization)
 
 	return &FastCDC{
 		buffer:       make([]byte, bufferSize),
