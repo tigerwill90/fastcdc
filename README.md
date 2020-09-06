@@ -8,8 +8,7 @@ a Fast and Efficient Content-Defined Chunking Approach for Data Deduplication.
 ### Further optimization
 
 This package is based on optimizations and variations introduce by [ronomon/deduplication](https://github.com/ronomon/deduplication).
-The primary objective was to have a pure go implementation of the FastCDC algorithm with a copyleft license that I needed for another
-project. Otherwise, the interface differs significantly and is designed to be easy to use, especially in streaming fashion.
+The following explanation is copied from its repository.
 
 > The following optimizations and variations on FastCDC are involved in the chunking algorithm:
 > 
@@ -23,10 +22,15 @@ project. Otherwise, the interface differs significantly and is designed to be ea
 >  
 > - Masks use 1 bit of chunk size normalization instead of 2 bits of chunk size normalization.
 
+### Objective
+For another project I need to deduplicate a stream of files parts by parts on the fly. I struggled to find a chunker package
+with this capability, so I developed mine. This is a pure go implementation of the FastCDC algorithm with a copyleft license. 
+The interface differs significantly from other chunker that I know. It's designed to be easy to use, especially in streaming fashion.
+
 ### Invariants
 
 go-fastcdc will ensure that all chunks meet your minimum and maximum chunk size requirement, except for the last chunk which can
-be smaller than the minimum. In addition, whether you use go-fastcdc in streaming or normal mode, it will always produce the same
+be smaller than the minimum. In addition, whether you use this package in streaming or normal mode, it will always produce the same
 chunk for identical input as long as the configuration remain the same (chunk size and internal buffer size).
 
 ### Other implementations

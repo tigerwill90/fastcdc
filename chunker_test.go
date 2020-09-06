@@ -975,7 +975,7 @@ func TestSekienWithoutAdaptiveThresoldFuzz(t *testing.T) {
 	max := 1 * 1024 * 1024
 	min := 32768
 
-	for i := 0; i < 1; i++ {
+	for i := 0; i < 10000; i++ {
 		bufSize := uint(rand.Intn(max-min+1) + min)
 
 		file, err := os.Open("fixtures/SekienAkashita.jpg")
@@ -984,7 +984,7 @@ func TestSekienWithoutAdaptiveThresoldFuzz(t *testing.T) {
 		}
 		defer file.Close()
 
-		chunker, err := NewChunker(context.Background(), With16kChunks(), WithBufferSize(46543))
+		chunker, err := NewChunker(context.Background(), With16kChunks(), WithBufferSize(bufSize))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1025,4 +1025,33 @@ func TestSekienWithoutAdaptiveThresoldFuzz(t *testing.T) {
 			t.Errorf("sum mismatch: want = %x, got = %x", sekienSha256(t), sum)
 		}
 	}
+}
+
+func Benchmark50GBbin64kChunks(b *testing.B) {
+	start := time.Now()
+	file, err := os.Open("/home/thanos/Downloads/50GB.bin")
+	if err != nil {
+		b.Fatal(err)
+	}
+
+	// WithAdaptiveThreshold 16.84
+	// Without 20.03
+
+	chunker, err := NewChunker(context.Background(), With64kChunks(), WithBufferSize(10*1024*1024))
+	if err != nil {
+		b.Fatal(err)
+	}
+
+	if err := chunker.Split(file, func(offset, length uint, chunk []byte) error {
+		return nil
+	}); err != nil {
+		b.Fatal(err)
+	}
+
+	if err := chunker.Finalize(func(offset, length uint, chunk []byte) error {
+		return nil
+	}); err != nil {
+		b.Fatal(err)
+	}
+	b.Log(time.Since(start))
 }
