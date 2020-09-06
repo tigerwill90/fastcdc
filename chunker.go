@@ -48,6 +48,10 @@ func NewChunker(ctx context.Context, opts ...Option) (*FastCDC, error) {
 		opt(config)
 	}
 
+	if config.bufferSize == 0 {
+		config.bufferSize = 2 * config.maxSize
+	}
+
 	const (
 		errMinMsg = "chunks size must be at least"
 		errMaxMsg = "chunks size must be equal or lesser than"
@@ -84,12 +88,22 @@ func NewChunker(ctx context.Context, opts ...Option) (*FastCDC, error) {
 		return nil, fmt.Errorf("maximum - minimum chunks size must be bigger than the average chunk size: %w", ErrInvalidChunksSizePoint)
 	}
 
+	var bufferSize uint
+	if remaining := config.bufferSize % config.maxSize; remaining == 0 {
+		bufferSize = config.bufferSize
+	} else {
+		// Correct the buffer size to be a multiple of max size.
+		// This guarantees that the chunks will always have the
+		// same size regardless of the size of the buffer.
+		bufferSize = config.bufferSize + config.maxSize - remaining
+	}
+
 	bits := logarithm2(config.avgSize)
 	maskS := mask(bits + 1)
 	maskL := mask(bits - 1)
 
 	return &FastCDC{
-		buffer:       make([]byte, config.bufferSize),
+		buffer:       make([]byte, bufferSize),
 		minSize:      config.minSize,
 		avgSize:      config.avgSize,
 		maxSize:      config.maxSize,
@@ -199,12 +213,10 @@ func (f *FastCDC) split(data io.Reader, fn ChunkFn, eof error) error {
 				currentCarry := bytesReadWithCarry - f.offset
 				f.carry += currentCarry
 
-				// for the length of the current carry,
 				// copy the part of the buffer where we can't find
 				// a chunk to the buffer from the previous carry position
-				for i := uint(0); i < currentCarry; i++ {
-					f.buffer[previousCarry+i] = f.buffer[f.offset+i]
-				}
+				copy(f.buffer[previousCarry:previousCarry+currentCarry], f.buffer[f.offset:f.offset+currentCarry])
+
 				break
 			}
 		}

@@ -957,6 +957,79 @@ func TestSekienWithoutAdaptiveThresold(t *testing.T) {
 	}
 }
 
+func TestSekienWithAdaptiveThresoldFuzz(t *testing.T) {
+	type Chunk struct {
+		Offset uint
+		Length uint
+	}
+
+	tests := []Chunk{
+		{0, 22366},
+		{22366, 8282},
+		{30648, 16303},
+		{46951, 18696},
+		{65647, 32768},
+		{98415, 11051},
+	}
+
+	seed := time.Now().UnixNano()
+	t.Logf("seed: %d", seed)
+	rand.Seed(seed)
+	max := 8 * 1024 * 1024
+	min := 32768
+
+	for i := 0; i < 100000; i++ {
+		bufSize := uint(rand.Intn(max-min+1) + min)
+
+		file, err := os.Open("fixtures/SekienAkashita.jpg")
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer file.Close()
+
+		chunker, err := NewChunker(context.Background(), With16kChunks(), WithAdaptiveThreshold(), WithBufferSize(bufSize))
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// 46543
+		// 59100
+
+		chunks := make([]Chunk, 0, 6)
+		hasher := sha256.New()
+		if err := chunker.Split(file, func(offset, length uint, chunk []byte) error {
+			chunks = append(chunks, Chunk{offset, length})
+			_, err := io.Copy(hasher, bytes.NewReader(chunk))
+			return err
+		}); err != nil {
+			t.Fatal(err)
+		}
+
+		if err := chunker.Finalize(func(offset, length uint, chunk []byte) error {
+			chunks = append(chunks, Chunk{offset, length})
+			_, err := io.Copy(hasher, bytes.NewReader(chunk))
+			return err
+		}); err != nil {
+			t.Fatal(err)
+		}
+
+		if len(chunks) != len(tests) {
+			t.Errorf("chunks length: want = %d, got = %d, buf size = %d", len(tests), len(chunks), bufSize)
+			continue
+		}
+		for i, res := range tests {
+			if chunks[i].Offset != res.Offset || chunks[i].Length != res.Length {
+				t.Errorf("chunks[%d] : want offset = %d, got offset = %d, want length = %d, got length = %d, buf size = %d", i, res.Offset, chunks[i].Offset, res.Length, chunks[i].Length, bufSize)
+			}
+		}
+
+		sum := hasher.Sum(nil)
+		if !reflect.DeepEqual(sekienSha256(t), sum) {
+			t.Errorf("sum mismatch: want = %x, got = %x", sekienSha256(t), sum)
+		}
+	}
+}
+
 func TestSekienWithoutAdaptiveThresoldFuzz(t *testing.T) {
 	type Chunk struct {
 		Offset uint
@@ -971,12 +1044,15 @@ func TestSekienWithoutAdaptiveThresoldFuzz(t *testing.T) {
 		{83485, 25981},
 	}
 
-	rand.Seed(0)
-	max := 1 * 1024 * 1024
-	min := 32768
+	seed := time.Now().UnixNano()
+	t.Logf("seed: %d", seed)
+	rand.Seed(seed)
+	max := 101
+	min := 1
 
-	for i := 0; i < 10000; i++ {
-		bufSize := uint(rand.Intn(max-min+1) + min)
+	for i := 0; i < 100000; i++ {
+		multiplier := uint(rand.Intn(max-min+1) + min)
+		bufSize := 32768 * multiplier
 
 		file, err := os.Open("fixtures/SekienAkashita.jpg")
 		if err != nil {
@@ -1037,7 +1113,7 @@ func Benchmark50GBbin64kChunks(b *testing.B) {
 	// WithAdaptiveThreshold 16.84
 	// Without 20.03
 
-	chunker, err := NewChunker(context.Background(), With64kChunks(), WithBufferSize(10*1024*1024))
+	chunker, err := NewChunker(context.Background(), With64kChunks(), WithAdaptiveThreshold(), WithBufferSize(10*1024*1024))
 	if err != nil {
 		b.Fatal(err)
 	}

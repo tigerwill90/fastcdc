@@ -13,24 +13,26 @@ type config struct {
 
 func defaultConfig() *config {
 	return &config{
-		bufferSize: 1 * 1024 * 1024,
-		minSize:    32_768,
-		avgSize:    65_536,
-		maxSize:    131_072,
+		minSize: 32_768,
+		avgSize: 65_536,
+		maxSize: 131_072,
 	}
 }
 
-// Set the internal buffer size.
-// It must be at least equal to the max chunk size.
-// Two different buffer size for two identical size
-// may output chunk of different size.
+// WithBufferSize set the internal buffer size.
+// Increasing the buffer size can speed up the chunking.
+// It must be at least equal to the max chunk size and
+// internally a correction of maximum "max size - 1" may
+// be added to the buffer to guarantees the chunk output stay
+// the same whatever the buffer size is set to.
+// Default is set to 2 * max size.
 func WithBufferSize(n uint) Option {
 	return func(c *config) {
 		c.bufferSize = n
 	}
 }
 
-// Set custom chunks size.
+// WithChunksSize set custom chunk size.
 func WithChunksSize(min, avg, max uint) Option {
 	return func(c *config) {
 		c.minSize = min
@@ -39,7 +41,7 @@ func WithChunksSize(min, avg, max uint) Option {
 	}
 }
 
-// Set the 16k average chunks size preset.
+// With16kChunks set the 16k average chunks size preset.
 func With16kChunks() Option {
 	return func(c *config) {
 		c.minSize = 8192
@@ -48,7 +50,7 @@ func With16kChunks() Option {
 	}
 }
 
-// Set the 32k average chunks size preset.
+// With32kChunks set the 32k average chunks size preset.
 func With32kChunks() Option {
 	return func(c *config) {
 		c.minSize = 16384
@@ -78,8 +80,7 @@ func WithStreamMode() Option {
 
 // WithAdaptiveThreshold activate adaptive threshold optimization.
 // A larger minimum chunk size now switches from the strict mask to the eager mask earlier.
-// When active, the chunking output will vary depending of the internal buffer size so you
-// need to stick with a predefined size in order to get deterministic chunk length.
+// This optimization speed up the chunking process.
 func WithAdaptiveThreshold() Option {
 	return func(c *config) {
 		c.optimization = true
