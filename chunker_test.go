@@ -44,7 +44,7 @@ func Example_basic() {
 	_ = chunker.Split(file, func(offset, length uint, chunk []byte) error {
 		// the chunk is only valid in the callback, copy it for later use
 		fmt.Printf("offset: %d, length: %d, sum: %x\n", offset, length, sha256.Sum256(chunk))
-		// Output :
+		// Output:
 		// offset: 0, length: 32857, sum: 5a80871bad4588c7278d39707fe68b8b174b1aa54c59169d3c2c72f1e16ef46d
 		// offset: 32857, length: 16408, sum: 13f6a4c6d42df2b76c138c13e86e1379c203445055c2b5f043a5f6c291fa520d
 		return nil
@@ -53,7 +53,7 @@ func Example_basic() {
 	_ = chunker.Finalize(func(offset, length uint, chunk []byte) error {
 		// the chunk is only valid in the callback, copy it for later use
 		fmt.Printf("offset: %d, length: %d, sum: %x\n", offset, length, sha256.Sum256(chunk))
-		// Output :
+		// Output:
 		// offset: 49265, length: 60201, sum: 0fe7305ba21a5a5ca9f89962c5a6f3e29cd3e2b36f00e565858e0012e5f8df36
 		return nil
 	})
@@ -65,8 +65,7 @@ func Example_stream() {
 
 	chunker, _ := NewChunker(context.Background(), With32kChunks(), WithBufferSize(10*1024*1024))
 
-	// should be set to the same size of the chunker buffer size
-	// for optimal performance
+	// a too small buffer will decrease performance
 	buf := make([]byte, 10*1024*1024)
 	for {
 		n, err := file.Read(buf)
@@ -79,6 +78,15 @@ func Example_stream() {
 		_ = chunker.Split(bytes.NewReader(buf[:n]), func(offset, length uint, chunk []byte) error {
 			// the chunk is only valid in the callback, copy it for later use
 			fmt.Printf("offset: %d, length: %d, sum: %x\n", offset, length, sha256.Sum256(chunk))
+			// offset: 0, length: 32857, sum: 5a80871bad4588c7278d39707fe68b8b174b1aa54c59169d3c2c72f1e16ef46d
+			// offset: 32857, length: 16408, sum: 13f6a4c6d42df2b76c138c13e86e1379c203445055c2b5f043a5f6c291fa520d
+			return nil
+		})
+		_ = chunker.Finalize(func(offset, length uint, chunk []byte) error {
+			// the chunk is only valid in the callback, copy it for later use
+			fmt.Printf("offset: %d, length: %d, sum: %x\n", offset, length, sha256.Sum256(chunk))
+			// Output:
+			// offset: 49265, length: 60201, sum: 0fe7305ba21a5a5ca9f89962c5a6f3e29cd3e2b36f00e565858e0012e5f8df36
 			return nil
 		})
 	}
@@ -128,7 +136,7 @@ func TestCeilDiv(t *testing.T) {
 	}
 }
 
-func TestMinus(t *testing.T) {
+func TestMin(t *testing.T) {
 	tests := []struct {
 		Point, Carry, Min, Result uint
 	}{
@@ -147,7 +155,7 @@ func TestMinus(t *testing.T) {
 	}
 }
 
-func TestNormalSize(t *testing.T) {
+func TestCenterSize(t *testing.T) {
 	tests := []struct {
 		Average, Min, SourceSize, Result uint
 	}{

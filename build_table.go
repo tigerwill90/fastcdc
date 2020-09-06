@@ -9,6 +9,9 @@ import (
 	"strings"
 )
 
+// Generate cleverly make "random" numbers by ciphering all zeros using a key and
+// nonce (a.k.a. initialization vector) of all zeroes. This is effectively
+// noise, but it is predictable noise, so the results are always the same.
 func Generate() string {
 	maxValue := uint32(math.Pow(2, 31))
 	table := make([]byte, 1024)

@@ -31,12 +31,13 @@ The interface differs significantly from other chunker that I know. It's designe
 
 go-fastcdc will ensure that all chunks meet your minimum and maximum chunk size requirement, except for the last chunk which can
 be smaller than the minimum. In addition, whether you use this package in streaming or normal mode, it will always produce the same
-chunk for identical input as long as the configuration remain the same (chunk size and internal buffer size).
+chunk for identical input as long as the configuration chunk size configuration remain the same.
 
 ### Other implementations
-- [ronomon/deduplication](https://github.com/ronomon/deduplication)
-- [nlfiedler/fastcdc-rs](https://github.com/nlfiedler/fastcdc-rs)
+- little more than a translation from [ronomon/deduplication](https://github.com/ronomon/deduplication)
+- inspired by [nlfiedler/fastcdc-rs](https://github.com/nlfiedler/fastcdc-rs)
 - [iscc/fastcdc-py](https://github.com/iscc/fastcdc-py)
+- [jotfs/fastcdc-go](https://github.com/jotfs/fastcdc-go)
 
 ### Authors
 
