@@ -111,7 +111,7 @@ func NewChunker(ctx context.Context, opts ...Option) (*FastCDC, error) {
 		streamMode:   config.stream,
 		maskS:        maskS,
 		maskL:        maskL,
-		optimization: config.optimization,
+		optimization: config.adaptiveThreshold,
 		ctx:          ctx,
 	}, nil
 }
@@ -124,7 +124,7 @@ type ChunkFn func(offset, length uint, chunk []byte) error
 // Split take the current reader and try to find chunk of the defined average size. When a chunk is
 // found, Split call the callback function with the offset, length and chunk. Split reuse it's
 // internal buffer, thereby the chunk is only valid within the callback. For later use, you most perform a copy value
-// of the chunk. If the Split is called more than once, the offset represents the position after merging
+// of the chunk. If Split is called more than once, the offset represents the position after merging
 // all input reader since a chunk can start in one buffer and end in another.
 func (f *FastCDC) Split(data io.Reader, fn ChunkFn) error {
 	if !f.streamMode && f.firstCall {
