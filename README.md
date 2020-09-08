@@ -41,7 +41,7 @@ handleError(err)
 ````
 
 Now let's say you want to process a file stream part by part. We configure the chunker in stream mode and keep the
-same option as before. For the sake of simplicity, we simulate the file stream by creating 
+same options as before. For the sake of simplicity, we simulate the file stream by creating 
 smaller part before splitting them into chunk of 32k average size.
 
 ````go
