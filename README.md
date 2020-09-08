@@ -105,7 +105,8 @@ Benchmark16kChunksWithOptimization-16   120	   9766584 ns/op	3435.64 MB/s	     6
 ### Invariants
 FastCDC will ensure that all chunks meet your minimum and maximum chunk size requirement, except for the last chunk which can
 be smaller than the minimum. In addition, whether you use this package in streaming or normal mode, it will always produce the same
-chunk for identical input as long as the chunk size configuration remain the same. Finally, all custom input are validated and return error.
+chunk for identical input as long as the configuration remain the same (except for the internal buffer size which has no impact 
+on the chunk output). Finally, all custom input are validated and return error.
 
 ### Other implementations
 - [ronomon/deduplication](https://github.com/ronomon/deduplication)
