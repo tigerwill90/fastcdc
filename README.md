@@ -9,7 +9,7 @@ go get -u github.com/tigerwill90/fastcdc
 ````
 
 ### Objective
-For another project, I need to deduplicate on the fly a stream of file served from a plugin through grpc. I struggled to find a chunker package
+For another project, I need to deduplicate "on the fly" a stream of file served from a plugin through grpc. I struggled to find a chunker package
 with this capability, so a friend and I developed our own. This is a pure go implementation of the FastCDC algorithm with a copyleft license. 
 The interface differs significantly from other chunker that I know. It's designed to be easy to use, especially in streaming fashion.
 This package is based on optimizations and variations introduce by [ronomon/deduplication](https://github.com/ronomon/deduplication). 
@@ -18,11 +18,22 @@ This package is based on optimizations and variations introduce by [ronomon/dedu
 
 In this example, the chunker is configured to split the given file into chunk of an average of 32kb.
 ````go
+package main
+
+import (
+	"context"
+	"crypto/sha256"
+	"fmt"
+	"github.com/tigerwill90/fastcdc"
+	"os"
+)
+
+func main() {
 	file, err := os.Open("fixtures/SekienAkashita.jpg")
 	handleError(err)
 	defer file.Close()
 
-	chunker, err := NewChunker(context.Background(), With32kChunks())
+	chunker, err := fastcdc.NewChunker(context.Background(), fastcdc.With32kChunks())
 	handleError(err)
 
 	err = chunker.Split(file, func(offset, length uint, chunk []byte) error {
@@ -38,17 +49,31 @@ In this example, the chunker is configured to split the given file into chunk of
 		return nil
 	})
 	handleError(err)
+}
 ````
 
 Now let's say you want to process a file stream part by part. We configure the chunker in stream mode and keep the
 same options as before. For the sake of simplicity, we simulate the file stream by creating 
 smaller part before splitting them into chunk of 32kb average size.
 ````go
+package main
+
+import (
+	"bytes"
+	"context"
+	"crypto/sha256"
+	"fmt"
+	"github.com/tigerwill90/fastcdc"
+	"io"
+	"os"
+)
+
+func main() {
 	file, err := os.Open("fixtures/SekienAkashita.jpg")
 	handleError(err)
 	defer file.Close()
 
-	chunker, err := NewChunker(context.Background(), WithStreamMode(), With32kChunks())
+	chunker, err := fastcdc.NewChunker(context.Background(), fastcdc.WithStreamMode(), fastcdc.With32kChunks())
 	handleError(err)
 
 	buf := make([]byte, 3*65_536)
@@ -74,6 +99,7 @@ smaller part before splitting them into chunk of 32kb average size.
 		return nil
 	})
 	handleError(err)
+}
 ````
 
 ### Benchmark

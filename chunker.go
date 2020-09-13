@@ -98,7 +98,8 @@ func NewChunker(ctx context.Context, opts ...Option) (*FastCDC, error) {
 	}
 
 	bits := logarithm2(config.avgSize)
-	// By default, mask use 1 bits normalization.
+	// Mask use 1 bits normalization.
+	// https://github.com/ronomon/deduplication#content-dependent-chunking
 	maskS := mask(bits + 1)
 	maskL := mask(bits - 1)
 
@@ -223,7 +224,7 @@ func (f *FastCDC) split(data io.Reader, fn ChunkFn, eof error) error {
 }
 
 // Breakpoint return the next chunk breakpoint on the buffer.
-// If there is no breakpoint found, it return 0, false.
+// If there is no breakpoint found, it return 0.
 func (f *FastCDC) breakpoint(buffer []byte) uint {
 	// if there is bytes carried from the last breakpoint call,
 	// reduce the expected chunk size to match the required size.
@@ -292,9 +293,9 @@ func (f *FastCDC) breakpoint(buffer []byte) uint {
 	return 0
 }
 
-// min reduce a cut-point with the carry bytes length
-// if the carry is >= than the cut-point, min return the
-// min acceptable cut-point.
+// min reduce a cut-point with the carry bytes length.
+// If the carry is >= than the cut-point, min return the
+// min cut-point.
 func min(point, carry, min uint) uint {
 	if carry < point {
 		return point - carry
@@ -324,8 +325,6 @@ func ceilDiv(x, y uint) uint {
 	return (x + y - 1) / y
 }
 
-// Masks use 1 bit of chunk size normalization instead of 2 bits of chunk size normalization.
-// https://github.com/ronomon/deduplication#content-dependent-chunking
 func mask(bits uint) uint {
 	if bits < 1 {
 		panic("bits too low")
