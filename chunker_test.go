@@ -41,15 +41,13 @@ func handleError(err error) {
 	}
 }
 
-// In this example, we configure the chunker to split the given file into chunk of an average of 32k.
-// We also enable optimization: a more adaptive threshold to speed up the process and we use masks with
-// 1 bit chunk size normalization instead of 2.
+// In this example, the chunker is configured to output chunk of an average of 32kb size.
 func Example_basic() {
 	file, err := os.Open("fixtures/SekienAkashita.jpg")
 	handleError(err)
 	defer file.Close()
 
-	chunker, err := NewChunker(context.Background(), With32kChunks(), WithOptimization())
+	chunker, err := NewChunker(context.Background(), With32kChunks())
 	handleError(err)
 
 	err = chunker.Split(file, func(offset, length uint, chunk []byte) error {
@@ -71,15 +69,14 @@ func Example_basic() {
 	// offset: 49265, length: 60201, sum: 0fe7305ba21a5a5ca9f89962c5a6f3e29cd3e2b36f00e565858e0012e5f8df36
 }
 
-// In this example, we configure the chunker to split a file stream part by part into chunk of an average of 32k.
-// For the sake of simplicity, we simulate the file stream by creating smaller part before splitting them into
-// chunk of 32k average size.
+// In this example, the chunker is configured in stream mode to split a file stream part by part into chunk of an average of 32kb.
+// For the sake of simplicity, the stream is simulated by cutting the file in multiple parts before the split.
 func Example_stream() {
 	file, err := os.Open("fixtures/SekienAkashita.jpg")
 	handleError(err)
 	defer file.Close()
 
-	chunker, err := NewChunker(context.Background(), WithStreamMode(), With32kChunks(), WithOptimization(), WithBufferSize(65_536))
+	chunker, err := NewChunker(context.Background(), WithStreamMode(), With32kChunks())
 	handleError(err)
 
 	buf := make([]byte, 3*65_536)
@@ -105,6 +102,7 @@ func Example_stream() {
 		return nil
 	})
 	handleError(err)
+	// Output:
 	// offset: 0, length: 32857, sum: 5a80871bad4588c7278d39707fe68b8b174b1aa54c59169d3c2c72f1e16ef46d
 	// offset: 32857, length: 16408, sum: 13f6a4c6d42df2b76c138c13e86e1379c203445055c2b5f043a5f6c291fa520d
 	// offset: 49265, length: 60201, sum: 0fe7305ba21a5a5ca9f89962c5a6f3e29cd3e2b36f00e565858e0012e5f8df36
@@ -240,7 +238,7 @@ func TestAllZeros(t *testing.T) {
 		Length uint
 	}
 	buffer := make([]byte, 10240)
-	chunker, err := NewChunker(context.Background(), WithOptimization(), WithChunksSize(64, 256, 1024), WithBufferSize(1024))
+	chunker, err := NewChunker(context.Background(), WithChunksSize(64, 256, 1024), WithBufferSize(1024))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -315,7 +313,7 @@ func TestRandomInputFuzz(t *testing.T) {
 				sBufSize := uint(rand.Intn(sMax-sMin+1) + sMin)
 
 				chunks := make([]Chunk, 0)
-				chunker, err := NewChunker(context.Background(), tc.opt, WithOptimization(), WithBufferSize(bufSize))
+				chunker, err := NewChunker(context.Background(), tc.opt, WithBufferSize(bufSize))
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -339,7 +337,7 @@ func TestRandomInputFuzz(t *testing.T) {
 
 				file.Seek(0, 0)
 
-				chunker, err = NewChunker(context.Background(), WithStreamMode(), WithOptimization(), tc.opt, WithBufferSize(bufSize))
+				chunker, err = NewChunker(context.Background(), WithStreamMode(), tc.opt, WithBufferSize(bufSize))
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -453,7 +451,7 @@ func TestSekienFuzz(t *testing.T) {
 				}
 
 				chunks := make([]Chunk, 0)
-				chunker, err := NewChunker(context.Background(), tc.opt, WithOptimization(), WithBufferSize(bufSize))
+				chunker, err := NewChunker(context.Background(), tc.opt, WithBufferSize(bufSize))
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -477,7 +475,7 @@ func TestSekienFuzz(t *testing.T) {
 
 				file.Seek(0, 0)
 
-				chunker, err = NewChunker(context.Background(), WithOptimization(), WithStreamMode(), tc.opt, WithBufferSize(bufSize))
+				chunker, err = NewChunker(context.Background(), WithStreamMode(), tc.opt, WithBufferSize(bufSize))
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -604,7 +602,7 @@ func TestSekienChunks(t *testing.T) {
 			defer file.Seek(0, 0)
 
 			chunks := make([]Chunk, 0, 6)
-			chunker, err := NewChunker(context.Background(), tc.Preset, WithOptimization(), WithBufferSize(tc.BufferSize))
+			chunker, err := NewChunker(context.Background(), tc.Preset, WithBufferSize(tc.BufferSize))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -696,7 +694,7 @@ func TestSekienChunksStream(t *testing.T) {
 			defer file.Seek(0, 0)
 
 			chunks := make([]Chunk, 0, 6)
-			chunker, err := NewChunker(context.Background(), WithStreamMode(), WithOptimization(), tc.Preset, WithBufferSize(tc.BufferSize))
+			chunker, err := NewChunker(context.Background(), WithStreamMode(), tc.Preset, WithBufferSize(tc.BufferSize))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -767,7 +765,7 @@ func TestSekien16kChunksStreamWithMissingPart(t *testing.T) {
 	defer file.Close()
 
 	chunks := make([]Chunk, 0, 6)
-	chunker, err := NewChunker(context.Background(), WithStreamMode(), WithOptimization(), With16kChunks(), WithBufferSize(32768))
+	chunker, err := NewChunker(context.Background(), WithStreamMode(), With16kChunks(), WithBufferSize(32768))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -822,7 +820,7 @@ func TestSekienMinChunks(t *testing.T) {
 	}
 	defer file.Close()
 
-	chunker, err := NewChunker(context.Background(), WithOptimization(), WithChunksSize(64, 256, 1024), WithBufferSize(1024))
+	chunker, err := NewChunker(context.Background(), WithChunksSize(64, 256, 1024), WithBufferSize(1024))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -861,7 +859,7 @@ func TestSekienMaxChunks(t *testing.T) {
 	defer file.Close()
 
 	chunks := make([]Chunk, 0, 1)
-	chunker, err := NewChunker(context.Background(), WithOptimization(), WithChunksSize(67_108_864, 268_435_456, 1_073_741_824), WithBufferSize(1_073_741_824))
+	chunker, err := NewChunker(context.Background(), WithChunksSize(67_108_864, 268_435_456, 1_073_741_824), WithBufferSize(1_073_741_824))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -922,4 +920,8 @@ func TestSmallInput(t *testing.T) {
 	if !reflect.DeepEqual(dataset, output) {
 		t.Error("chunk mismatch")
 	}
+}
+
+func TestGenerate(t *testing.T) {
+	t.Logf(Generate64bitsTable())
 }

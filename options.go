@@ -3,21 +3,18 @@ package fastcdc
 type Option func(*config)
 
 type config struct {
-	bufferSize        uint
-	minSize           uint
-	avgSize           uint
-	maxSize           uint
-	stream            bool
-	adaptiveThreshold bool
-	normalization     uint
+	bufferSize uint
+	minSize    uint
+	avgSize    uint
+	maxSize    uint
+	stream     bool
 }
 
 func defaultConfig() *config {
 	return &config{
-		minSize:       32_768,
-		avgSize:       65_536,
-		maxSize:       131_072,
-		normalization: 2,
+		minSize: 32_768,
+		avgSize: 65_536,
+		maxSize: 131_072,
 	}
 }
 
@@ -77,15 +74,5 @@ func With64kChunks() Option {
 func WithStreamMode() Option {
 	return func(c *config) {
 		c.stream = true
-	}
-}
-
-// WithOptimization speed up the chunking by using adaptive threshold optimization.
-// A larger minimum chunk size now switches from the strict mask to the eager mask earlier.
-// Additionally,masks use 1 bit of chunk size normalization instead of 2.
-func WithOptimization() Option {
-	return func(c *config) {
-		c.adaptiveThreshold = true
-		c.normalization = 1
 	}
 }

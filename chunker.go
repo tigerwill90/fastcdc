@@ -31,7 +31,6 @@ type FastCDC struct {
 	previousBytesRead uint
 	streamMode        bool
 	firstCall         bool
-	optimization      bool
 	ctx               context.Context
 }
 
@@ -100,19 +99,18 @@ func NewChunker(ctx context.Context, opts ...Option) (*FastCDC, error) {
 
 	bits := logarithm2(config.avgSize)
 	// By default, mask use 1 bits normalization.
-	maskS := mask(bits + config.normalization)
-	maskL := mask(bits - config.normalization)
+	maskS := mask(bits + 1)
+	maskL := mask(bits - 1)
 
 	return &FastCDC{
-		buffer:       make([]byte, bufferSize),
-		minSize:      config.minSize,
-		avgSize:      config.avgSize,
-		maxSize:      config.maxSize,
-		streamMode:   config.stream,
-		maskS:        maskS,
-		maskL:        maskL,
-		optimization: config.adaptiveThreshold,
-		ctx:          ctx,
+		buffer:     make([]byte, bufferSize),
+		minSize:    config.minSize,
+		avgSize:    config.avgSize,
+		maxSize:    config.maxSize,
+		streamMode: config.stream,
+		maskS:      maskS,
+		maskL:      maskL,
+		ctx:        ctx,
 	}, nil
 }
 
@@ -255,15 +253,7 @@ func (f *FastCDC) breakpoint(buffer []byte) uint {
 		bufferLength = maxSize
 	}
 
-	normalSize := avgSize
-
-	if f.optimization {
-		normalSize = centerSize(avgSize, minSize, bufferLength)
-	} else {
-		if bufferLength <= avgSize {
-			normalSize = bufferLength
-		}
-	}
+	normalSize := centerSize(avgSize, minSize, bufferLength)
 
 	// Start by using the "harder" chunking judgement to find
 	// chunks that run smaller than the desired normal size.
