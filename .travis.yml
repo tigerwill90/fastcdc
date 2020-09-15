@@ -2,3 +2,5 @@ language: go
 
 go:
   - 1.15.x
+
+script: go test -v -timeout 30m
