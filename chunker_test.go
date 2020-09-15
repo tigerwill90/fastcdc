@@ -476,7 +476,7 @@ func TestRandomInputFuzz(t *testing.T) {
 			sMin := 1000            // min stream buffer size
 
 			// repeat test
-			for i := 0; i < 10000; i++ {
+			for i := 0; i < 5000; i++ {
 				rd := rand.Intn(8*1024*1024-1000+1) + 1000
 				data := make([]byte, rd)
 				rand.Read(data)
