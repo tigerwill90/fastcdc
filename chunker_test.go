@@ -921,7 +921,3 @@ func TestSmallInput(t *testing.T) {
 		t.Error("chunk mismatch")
 	}
 }
-
-func TestGenerate(t *testing.T) {
-	t.Logf(Generate64bitsTable())
-}
