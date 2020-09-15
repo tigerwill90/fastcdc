@@ -216,7 +216,6 @@ func (f *FastCDC) split(data io.Reader, fn ChunkFn, eof error) error {
 				// copy the part of the buffer where we can't find
 				// a chunk to the buffer from the previous carry position
 				copy(f.buffer[previousCarry:previousCarry+currentCarry], f.buffer[f.offset:f.offset+currentCarry])
-
 				break
 			}
 		}

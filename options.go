@@ -40,7 +40,7 @@ func WithChunksSize(min, avg, max uint) Option {
 	}
 }
 
-// With16kChunks set the 16k average chunks size preset.
+// With16kChunks set the 16kb average chunks size preset.
 func With16kChunks() Option {
 	return func(c *config) {
 		c.minSize = 8192
@@ -49,7 +49,7 @@ func With16kChunks() Option {
 	}
 }
 
-// With32kChunks set the 32k average chunks size preset.
+// With32kChunks set the 32kb average chunks size preset.
 func With32kChunks() Option {
 	return func(c *config) {
 		c.minSize = 16384
@@ -58,7 +58,7 @@ func With32kChunks() Option {
 	}
 }
 
-// With64kChunks set the 64k average chunks size preset.
+// With64kChunks set the 64kb average chunks size preset.
 // It's the default and recommended chunks size
 // for optimal end-to-end deduplication and compression.
 // https://www.usenix.org/system/files/conference/atc12/atc12-final293.pdf
