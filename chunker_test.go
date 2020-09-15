@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	"errors"
 	"fmt"
 	"io"
 	"math/rand"
@@ -232,6 +233,183 @@ func TestMaskPanic(t *testing.T) {
 	}
 }
 
+func TestSplitPanic(t *testing.T) {
+	size := 32 * 1024 * 1024
+	data := randomData(155, size)
+
+	defer func() {
+		if r := recover(); r == nil {
+			t.Error("the code did not panic")
+		} else {
+			panicMsg := r.(string)
+			want := "split must not be call multiple time in regular mode, use stream mode instead"
+			if panicMsg != want {
+				t.Errorf("want = %s, got = %s", want, r)
+			}
+		}
+	}()
+
+	chunker, err := NewChunker(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = chunker.Split(bytes.NewReader(data), func(offset, length uint, chunk []byte) error {
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = chunker.Split(bytes.NewReader(data), func(offset, length uint, chunk []byte) error {
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = chunker.Finalize(func(offset, length uint, chunk []byte) error {
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestFinalizePanic(t *testing.T) {
+	defer func() {
+		if r := recover(); r == nil {
+			t.Error("the code did not panic")
+		} else {
+			panicMsg := r.(string)
+			want := "finalize most succeed a split, call split first"
+			if panicMsg != want {
+				t.Errorf("want = %s, got = %s", want, r)
+			}
+		}
+	}()
+
+	chunker, err := NewChunker(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = chunker.Finalize(func(offset, length uint, chunk []byte) error {
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestChunkerValidation(t *testing.T) {
+	tests := map[string]struct {
+		MinSize, AvgSize, MaxSize, BufferSize uint
+		Want                                  error
+	}{
+		"minimum min size": {
+			MinSize:    MinimumMin - 1,
+			AvgSize:    AverageMin,
+			MaxSize:    MaximumMin,
+			BufferSize: MaximumMin,
+			Want:       ErrInvalidChunksSizePoint,
+		},
+		"average min size": {
+			MinSize:    MinimumMin,
+			AvgSize:    AverageMin - 1,
+			MaxSize:    MaximumMin,
+			BufferSize: MaximumMin,
+			Want:       ErrInvalidChunksSizePoint,
+		},
+		"maximum min size": {
+			MinSize:    MinimumMin,
+			AvgSize:    AverageMin,
+			MaxSize:    MaximumMin - 1,
+			BufferSize: MaximumMin,
+			Want:       ErrInvalidChunksSizePoint,
+		},
+		"minimum max size": {
+			MinSize:    MinimumMax + 1,
+			AvgSize:    AverageMax,
+			MaxSize:    MaximumMax,
+			BufferSize: MaximumMax,
+			Want:       ErrInvalidChunksSizePoint,
+		},
+		"average max size": {
+			MinSize:    MinimumMax,
+			AvgSize:    AverageMax + 1,
+			MaxSize:    MaximumMax,
+			BufferSize: MaximumMax,
+			Want:       ErrInvalidChunksSizePoint,
+		},
+		"maximum max size": {
+			MinSize:    MinimumMax,
+			AvgSize:    AverageMax,
+			MaxSize:    MaximumMax + 1,
+			BufferSize: MaximumMax,
+			Want:       ErrInvalidChunksSizePoint,
+		},
+		"minimum buffer length": {
+			MinSize:    MinimumMin,
+			AvgSize:    AverageMin,
+			MaxSize:    MaximumMin,
+			BufferSize: MaximumMin - 1,
+			Want:       ErrInvalidBufferLength,
+		},
+		"min size bigger or equal than avg size": {
+			MinSize:    AverageMin,
+			AvgSize:    AverageMin,
+			MaxSize:    MaximumMin,
+			BufferSize: MaximumMin,
+			Want:       ErrInvalidChunksSizePoint,
+		},
+		"max size smaller or equal than avg size": {
+			MinSize:    MinimumMin,
+			AvgSize:    MaximumMin,
+			MaxSize:    MaximumMin,
+			BufferSize: MaximumMin,
+			Want:       ErrInvalidChunksSizePoint,
+		},
+		"proportional cut point": {
+			MinSize:    1048,
+			AvgSize:    2048,
+			MaxSize:    3096,
+			BufferSize: 2 * 3096,
+			Want:       ErrInvalidChunksSizePoint,
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			_, err := NewChunker(context.Background(), WithChunksSize(tc.MinSize, tc.AvgSize, tc.MaxSize), WithBufferSize(tc.BufferSize))
+			if !errors.Is(err, tc.Want) {
+				t.Errorf("want = %s, got = %s", tc.Want, err)
+			}
+		})
+	}
+}
+
+func TestCanceledContext(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	size := 32 * 1024 * 1024
+	data := randomData(155, size)
+	chunker, err := NewChunker(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = chunker.Split(bytes.NewReader(data), func(offset, length uint, chunk []byte) error {
+		return nil
+	})
+	if !errors.Is(err, context.Canceled) {
+		t.Errorf("want = %s, got = %s", context.Canceled, err)
+	}
+
+	err = chunker.Finalize(func(offset, length uint, chunk []byte) error {
+		return nil
+	})
+	if !errors.Is(err, context.Canceled) {
+		t.Errorf("want = %s, got = %s", context.Canceled, err)
+	}
+}
+
 func TestAllZeros(t *testing.T) {
 	type Chunk struct {
 		Offset uint
@@ -270,10 +448,10 @@ func TestAllZeros(t *testing.T) {
 
 func TestRandomInputFuzz(t *testing.T) {
 	tests := []struct {
-		name    string
-		minSize int
-		maxSize int
-		opt     Option
+		Name    string
+		MinSize int
+		MaxSize int
+		Opt     Option
 	}{
 		{"16kChunks", 8192, 32768, With16kChunks()},
 		{"32kChunks", 16384, 65_536, With32kChunks()},
@@ -291,9 +469,9 @@ func TestRandomInputFuzz(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
+		t.Run(tc.Name, func(t *testing.T) {
 			max := 1 * 1024 * 1024  // max buffer size
-			min := tc.maxSize       // min buffer size for the chunk size range, it's set to the max chunks size
+			min := tc.MaxSize       // min buffer size for the chunk size range, it's set to the max chunks size
 			sMax := 1 * 1024 * 1024 // max stream buffer size
 			sMin := 1000            // min stream buffer size
 
@@ -313,7 +491,7 @@ func TestRandomInputFuzz(t *testing.T) {
 				sBufSize := uint(rand.Intn(sMax-sMin+1) + sMin)
 
 				chunks := make([]Chunk, 0)
-				chunker, err := NewChunker(context.Background(), tc.opt, WithBufferSize(bufSize))
+				chunker, err := NewChunker(context.Background(), tc.Opt, WithBufferSize(bufSize))
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -337,7 +515,7 @@ func TestRandomInputFuzz(t *testing.T) {
 
 				file.Seek(0, 0)
 
-				chunker, err = NewChunker(context.Background(), WithStreamMode(), tc.opt, WithBufferSize(bufSize))
+				chunker, err = NewChunker(context.Background(), WithStreamMode(), tc.Opt, WithBufferSize(bufSize))
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -372,29 +550,29 @@ func TestRandomInputFuzz(t *testing.T) {
 				}
 
 				if len(chunks) != len(chunksStream) {
-					t.Errorf("length: want = %d, got = %d, buffer length = %d, stream buffer = %d, file size = %d", len(chunks), len(chunksStream), bufSize, sBufSize, rd)
+					t.Errorf("length: want = %d, got = %d, buffer length = %d, stream buffer length = %d, file size = %d", len(chunks), len(chunksStream), bufSize, sBufSize, rd)
 					file.Seek(0, 0)
 					continue
 				}
 
 				for i, chunk := range chunks {
 					if chunk.Offset != chunksStream[i].Offset {
-						t.Errorf("offset: want = %d, got = %d, buffer = %d, stream buffer = %d, file size = %d", chunk.Offset, chunksStream[i].Offset, bufSize, sBufSize, rd)
+						t.Errorf("offset: want = %d, got = %d, buffer length = %d, stream buffer length = %d, file size = %d", chunk.Offset, chunksStream[i].Offset, bufSize, sBufSize, rd)
 					}
 					if chunk.Length != chunksStream[i].Length {
-						t.Errorf("length: want = %d, got = %d, buffer = %d, stream buffer = %d, file size = %d", chunk.Offset, chunksStream[i].Offset, bufSize, sBufSize, rd)
+						t.Errorf("length: want = %d, got = %d, buffer length = %d, stream buffer length = %d, file size = %d", chunk.Offset, chunksStream[i].Offset, bufSize, sBufSize, rd)
 					}
 					if chunk.Length != uint(len(chunk.Chunk)) {
-						t.Errorf("regular split: length mismatch: want = %d, got = %d, buffer = %d, file size = %d", chunk.Length, uint(len(chunk.Chunk)), bufSize, rd)
+						t.Errorf("regular split: length mismatch: want = %d, got = %d, buffer length = %d, file size = %d", chunk.Length, uint(len(chunk.Chunk)), bufSize, rd)
 					}
 					if chunksStream[i].Length != uint(len(chunksStream[i].Chunk)) {
-						t.Errorf("stream split: length mismatch: want = %d, got = %d, buffer = %d, stream buffer = %d, file size = %d", chunk.Length, uint(len(chunk.Chunk)), bufSize, sBufSize, rd)
+						t.Errorf("stream split: length mismatch: want = %d, got = %d, buffer length = %d, stream buffer length = %d, file size = %d", chunk.Length, uint(len(chunk.Chunk)), bufSize, sBufSize, rd)
 					}
-					if (chunk.Length < uint(tc.minSize) || chunk.Length > uint(tc.maxSize)) && i != len(chunks)-1 {
-						t.Errorf("regular split: chunks size: %d < %d < %d, buffer = %d, file size = %d", tc.minSize, chunk.Length, tc.maxSize, bufSize, rd)
+					if (chunk.Length < uint(tc.MinSize) || chunk.Length > uint(tc.MaxSize)) && i != len(chunks)-1 {
+						t.Errorf("regular split: chunks size: %d < %d < %d, buffer length = %d, file size = %d", tc.MinSize, chunk.Length, tc.MaxSize, bufSize, rd)
 					}
-					if (chunksStream[i].Length < uint(tc.minSize) || chunksStream[i].Length > uint(tc.maxSize)) && i != len(chunksStream)-1 {
-						t.Errorf("regular split: chunks size: %d < %d < %d, buffer = %d, stream buffer = %d, file size = %d", tc.minSize, chunksStream[i].Length, tc.maxSize, bufSize, sBufSize, rd)
+					if (chunksStream[i].Length < uint(tc.MinSize) || chunksStream[i].Length > uint(tc.MaxSize)) && i != len(chunksStream)-1 {
+						t.Errorf("regular split: chunks size: %d < %d < %d, buffer length = %d, stream buffer length = %d, file size = %d", tc.MinSize, chunksStream[i].Length, tc.MaxSize, bufSize, sBufSize, rd)
 					}
 				}
 
@@ -414,15 +592,53 @@ func TestRandomInputFuzz(t *testing.T) {
 }
 
 func TestSekienFuzz(t *testing.T) {
+	type Chunk struct {
+		Offset uint
+		Length uint
+	}
+
 	tests := []struct {
-		name    string
-		minSize int
-		maxSize int
-		opt     Option
+		Name    string
+		MinSize int
+		MaxSize int
+		Opt     Option
+		Want    []Chunk
 	}{
-		{"16kChunks", 8192, 32768, With16kChunks()},
-		{"32kChunks", 16384, 65_536, With32kChunks()},
-		{"64kChunks", 32_768, 131_072, With64kChunks()},
+		{
+			Name:    "16kChunks",
+			MinSize: 8192,
+			MaxSize: 32768,
+			Opt:     With16kChunks(),
+			Want: []Chunk{
+				{0, 22366},
+				{22366, 8282},
+				{30648, 16303},
+				{46951, 18696},
+				{65647, 32768},
+				{98415, 11051},
+			},
+		},
+		{
+			Name:    "32kChunks",
+			MinSize: 16384,
+			MaxSize: 65_536,
+			Opt:     With32kChunks(),
+			Want: []Chunk{
+				{0, 32857},
+				{32857, 16408},
+				{49265, 60201},
+			},
+		},
+		{
+			Name:    "64kChunks",
+			MinSize: 32_768,
+			MaxSize: 131_072,
+			Opt:     With64kChunks(),
+			Want: []Chunk{
+				{0, 32857},
+				{32857, 76609},
+			},
+		},
 	}
 
 	file, err := os.Open("fixtures/SekienAkashita.jpg")
@@ -433,9 +649,9 @@ func TestSekienFuzz(t *testing.T) {
 
 	rand.Seed(time.Now().UnixNano())
 	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
+		t.Run(tc.Name, func(t *testing.T) {
 			max := 1 * 1024 * 1024  // max buffer size
-			min := tc.maxSize       // min buffer size for the chunk size range, it's set to the max chunks size
+			min := tc.MaxSize       // min buffer size for the chunk size range, it's set to the max chunks size
 			sMax := 1 * 1024 * 1024 // max stream buffer size
 			sMin := 1000            // min stream buffer size
 
@@ -451,7 +667,7 @@ func TestSekienFuzz(t *testing.T) {
 				}
 
 				chunks := make([]Chunk, 0)
-				chunker, err := NewChunker(context.Background(), tc.opt, WithBufferSize(bufSize))
+				chunker, err := NewChunker(context.Background(), tc.Opt, WithBufferSize(bufSize))
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -475,7 +691,7 @@ func TestSekienFuzz(t *testing.T) {
 
 				file.Seek(0, 0)
 
-				chunker, err = NewChunker(context.Background(), WithStreamMode(), tc.opt, WithBufferSize(bufSize))
+				chunker, err = NewChunker(context.Background(), WithStreamMode(), tc.Opt, WithBufferSize(bufSize))
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -507,30 +723,39 @@ func TestSekienFuzz(t *testing.T) {
 					t.Fatal(err)
 				}
 
-				if len(chunks) != len(chunksStream) {
-					t.Errorf("length: want = %d, got = %d, buffer length = %d, stream buffer = %d", len(chunks), len(chunksStream), bufSize, sBufSize)
+				if len(chunks) != len(tc.Want) {
+					t.Errorf("length: want = %d, got = %d, buffer length = %d, stream buffer length = %d", len(chunks), len(tc.Want), bufSize, sBufSize)
+					file.Seek(0, 0)
+					continue
+				}
+
+				if len(chunksStream) != len(tc.Want) {
+					t.Errorf("length: want = %d, got = %d, buffer length = %d, stream buffer length = %d", len(chunksStream), len(tc.Want), bufSize, sBufSize)
 					file.Seek(0, 0)
 					continue
 				}
 
 				for i, chunk := range chunks {
-					if chunk.Offset != chunksStream[i].Offset {
-						t.Errorf("offset: want = %d, got = %d, buffer = %d, stream buffer = %d", chunk.Offset, chunksStream[i].Offset, bufSize, sBufSize)
+					if chunk.Offset != tc.Want[i].Offset {
+						t.Errorf("offset: want = %d, got = %d, buffer = %d, stream buffer length = %d", chunk.Offset, tc.Want[i].Offset, bufSize, sBufSize)
 					}
-					if chunk.Length != chunksStream[i].Length {
-						t.Errorf("length: want = %d, got = %d, buffer = %d, stream buffer = %d", chunk.Offset, chunksStream[i].Offset, bufSize, sBufSize)
+					if chunk.Length != tc.Want[i].Length {
+						t.Errorf("length: want = %d, got = %d, buffer = %d, stream buffer length = %d", chunk.Offset, tc.Want[i].Offset, bufSize, sBufSize)
 					}
 					if chunk.Length != uint(len(chunk.Chunk)) {
-						t.Errorf("regular split: length mismatch: want = %d, got = %d, buffer = %d", chunk.Length, uint(len(chunk.Chunk)), bufSize)
+						t.Errorf("regular split: length mismatch: want = %d, got = %d, buffer length = %d", chunk.Length, uint(len(chunk.Chunk)), bufSize)
 					}
-					if chunksStream[i].Length != uint(len(chunksStream[i].Chunk)) {
-						t.Errorf("stream split: length mismatch: want = %d, got = %d, buffer = %d, stream buffer = %d", chunk.Length, uint(len(chunk.Chunk)), bufSize, sBufSize)
+				}
+
+				for i, chunk := range chunksStream {
+					if chunk.Offset != tc.Want[i].Offset {
+						t.Errorf("offset: want = %d, got = %d, buffer = %d, stream buffer length = %d", chunk.Offset, tc.Want[i].Offset, bufSize, sBufSize)
 					}
-					if (chunk.Length < uint(tc.minSize) || chunk.Length > uint(tc.maxSize)) && i != len(chunks)-1 {
-						t.Errorf("regular split: chunks size: %d < %d < %d, buffer = %d", tc.minSize, chunk.Length, tc.maxSize, bufSize)
+					if chunk.Length != tc.Want[i].Length {
+						t.Errorf("length: want = %d, got = %d, buffer = %d, stream buffer length = %d", chunk.Offset, tc.Want[i].Offset, bufSize, sBufSize)
 					}
-					if (chunksStream[i].Length < uint(tc.minSize) || chunksStream[i].Length > uint(tc.maxSize)) && i != len(chunksStream)-1 {
-						t.Errorf("regular split: chunks size: %d < %d < %d, buffer = %d, stream buffer = %d", tc.minSize, chunksStream[i].Length, tc.maxSize, bufSize, sBufSize)
+					if chunk.Length != uint(len(chunk.Chunk)) {
+						t.Errorf("regular split: length mismatch: want = %d, got = %d, buffer length = %d", chunk.Length, uint(len(chunk.Chunk)), bufSize)
 					}
 				}
 

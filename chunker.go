@@ -146,6 +146,13 @@ func (f *FastCDC) Finalize(fn ChunkFn) error {
 		f.previousBytesRead = 0
 		f.firstCall = false
 	}()
+
+	select {
+	case <-f.ctx.Done():
+		return f.ctx.Err()
+	default:
+	}
+
 	reader := bytes.NewReader(nil)
 	// chunk the remaining part
 	if f.streamMode {
