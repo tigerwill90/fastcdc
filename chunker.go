@@ -132,9 +132,9 @@ func (f *FastCDC) Split(data io.Reader, fn ChunkFn) error {
 	return f.split(data, fn, nil)
 }
 
-// Finalize must be called at the end of the file or stream.
+// Finalize must be called at the end of the split.
 // It return the remaining chunk from the last buffer.
-// If finalize is called before split, it wil panic,
+// If finalize is called before split, it will panic.
 func (f *FastCDC) Finalize(fn ChunkFn) error {
 	if !f.firstCall {
 		panic("finalize most succeed a split, call split first")
