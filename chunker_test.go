@@ -1130,16 +1130,18 @@ func TestSmallInput(t *testing.T) {
 		t.Fatal(err)
 	}
 	output := make([]byte, 0, 8193)
-	chunker.Split(bytes.NewReader(dataset), func(offset, length uint, chunk []byte) error {
+	if err := chunker.Split(bytes.NewReader(dataset), func(offset, length uint, chunk []byte) error {
 		output = append(output, chunk...)
 		return nil
-	})
+	}); err != nil {
+		t.Fatal(err)
+	}
 
 	if err := chunker.Finalize(func(offset, length uint, chunk []byte) error {
 		output = append(output, chunk...)
 		return nil
 	}); err != nil {
-		t.Fatal()
+		t.Fatal(err)
 	}
 
 	if !reflect.DeepEqual(dataset, output) {

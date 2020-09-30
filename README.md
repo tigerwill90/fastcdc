@@ -12,10 +12,8 @@ go get -u github.com/tigerwill90/fastcdc
 ````
 
 ### Objective
-For another project, I need to deduplicate "on the fly" a stream of file served from a plugin through grpc. I struggled to find a chunker package
-with this capability, so a friend and I developed our own. This is a pure go implementation of the FastCDC algorithm with a copyleft license. 
-The interface differs significantly from other chunker that I know. It's designed to be easy to use, especially in streaming fashion.
-This package is based on optimizations and variations introduce by [ronomon/deduplication](https://github.com/ronomon/deduplication). 
+This is a fast and efficient pure go implementation of the FastCDC algorithm with a copyleft license. The interface differs significantly from other chunker that I know.
+It's designed to be easy to use, especially in streaming fashion. This package is based on optimizations and variations introduce by [ronomon/deduplication](https://github.com/ronomon/deduplication). 
 
 ### Example
 
