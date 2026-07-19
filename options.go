@@ -7,7 +7,6 @@ type config struct {
 	minSize    uint
 	avgSize    uint
 	maxSize    uint
-	stream     bool
 }
 
 func defaultConfig() *config {
@@ -18,12 +17,10 @@ func defaultConfig() *config {
 	}
 }
 
-// WithBufferSize set the internal buffer size.
-// Increasing the buffer size can speed up the chunking.
-// It must be at least equal to the max chunk size and
-// internally a correction of maximum "max size - 1" may
-// be added to the buffer to guarantees the chunk output stay
-// the same whatever the buffer size is set to.
+// WithBufferSize set the internal buffer size. It must be at least
+// equal to the max chunk size. The buffer size has no impact on the
+// chunk output, but a bigger buffer reduces the internal copying and
+// can speed up the chunking.
 // Default is set to 2 * max size.
 func WithBufferSize(n uint) Option {
 	return func(c *config) {
@@ -44,7 +41,7 @@ func WithChunksSize(min, avg, max uint) Option {
 func With16kChunks() Option {
 	return func(c *config) {
 		c.minSize = 8192
-		c.avgSize = 16_834
+		c.avgSize = 16_384
 		c.maxSize = 32_768
 	}
 }
@@ -52,7 +49,7 @@ func With16kChunks() Option {
 // With32kChunks set the 32kb average chunks size preset.
 func With32kChunks() Option {
 	return func(c *config) {
-		c.minSize = 16384
+		c.minSize = 16_384
 		c.avgSize = 32_768
 		c.maxSize = 65_536
 	}
@@ -67,12 +64,5 @@ func With64kChunks() Option {
 		c.minSize = 32_768
 		c.avgSize = 65_536
 		c.maxSize = 131_072
-	}
-}
-
-// WithStreamMode set the chunker in stream mode.
-func WithStreamMode() Option {
-	return func(c *config) {
-		c.stream = true
 	}
 }

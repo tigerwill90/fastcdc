@@ -1,3 +1,3 @@
-module github.com/tigerwill90/fastcdc
+module github.com/tigerwill90/fastcdc/v2
 
-go 1.15
+go 1.26

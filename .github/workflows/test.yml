@@ -1,0 +1,20 @@
+name: test
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26.x'
+      - run: go vet ./...
+      - run: go test -race -timeout 10m -coverprofile=coverage.txt -covermode=atomic ./...
+      - uses: codecov/codecov-action@v5
+        with:
+          files: coverage.txt

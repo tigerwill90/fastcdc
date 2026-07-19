@@ -1,19 +1,20 @@
-[![PkgGoDev](https://pkg.go.dev/badge/github.com/tigerwill90/fastcdc?tab=doc)](https://pkg.go.dev/github.com/tigerwill90/fastcdc?tab=doc)
-[![Build Status](https://travis-ci.org/tigerwill90/fastcdc.svg?branch=master)](https://travis-ci.org/tigerwill90/fastcdc)
+[![PkgGoDev](https://pkg.go.dev/badge/github.com/tigerwill90/fastcdc/v2?tab=doc)](https://pkg.go.dev/github.com/tigerwill90/fastcdc/v2?tab=doc)
+[![Build Status](https://github.com/tigerwill90/fastcdc/actions/workflows/test.yml/badge.svg)](https://github.com/tigerwill90/fastcdc/actions/workflows/test.yml)
 [![codecov](https://codecov.io/gh/tigerwill90/fastcdc/branch/master/graph/badge.svg)](https://codecov.io/gh/tigerwill90/fastcdc)
-[![Go Report Card](https://goreportcard.com/badge/github.com/tigerwill90/fastcdc)](https://goreportcard.com/report/github.com/tigerwill90/fastcdc)
+[![Go Report Card](https://goreportcard.com/badge/github.com/tigerwill90/fastcdc/v2)](https://goreportcard.com/report/github.com/tigerwill90/fastcdc/v2)
 # FastCDC
 This package implements the FastCDC content defined chunking algorithm based on the gear-rolling hash and implements optimizations proposed by Wen Xia et al. in their 2016 paper [FastCDC:
 a Fast and Efficient Content-Defined Chunking Approach for Data Deduplication](https://www.usenix.org/system/files/conference/atc16/atc16-paper-xia.pdf).
 
-**Install:**
+**Install** (requires Go 1.26+):
 ````
-go get -u github.com/tigerwill90/fastcdc
+go get -u github.com/tigerwill90/fastcdc/v2
 ````
 
 ### Objective
-This is a fast and efficient pure go implementation of the FastCDC algorithm with a copyleft license. The interface differs significantly from other chunker that I know.
-It's designed to be easy to use, especially in streaming fashion. This package is based on optimizations and variations introduce by [ronomon/deduplication](https://github.com/ronomon/deduplication). 
+This is a fast and efficient pure go implementation of the FastCDC algorithm with a copyleft license. The chunker consumes
+any `io.Reader` and yields its chunks through a native Go iterator, with zero allocation in the chunking path. This package
+is based on optimizations and variations introduced by [ronomon/deduplication](https://github.com/ronomon/deduplication).
 
 ### Example
 
@@ -22,103 +23,52 @@ In this example, the chunker is configured to split the given file into chunk of
 package main
 
 import (
-	"context"
 	"crypto/sha256"
 	"fmt"
-	"github.com/tigerwill90/fastcdc"
 	"os"
+
+	"github.com/tigerwill90/fastcdc/v2"
 )
 
 func main() {
 	file, err := os.Open("fixtures/SekienAkashita.jpg")
-	handleError(err)
+	if err != nil {
+		panic(err)
+	}
 	defer file.Close()
 
-	chunker, err := fastcdc.NewChunker(context.Background(), fastcdc.With32kChunks())
-	handleError(err)
-
-	err = chunker.Split(file, func(offset, length uint, chunk []byte) error {
-		// the chunk is only valid in the callback, copy it for later use
-		fmt.Printf("offset: %d, length: %d, sum: %x\n", offset, length, sha256.Sum256(chunk))
-		return nil
-	})
-	handleError(err)
-
-	err = chunker.Finalize(func(offset, length uint, chunk []byte) error {
-		// the chunk is only valid in the callback, copy it for later use
-		fmt.Printf("offset: %d, length: %d, sum: %x\n", offset, length, sha256.Sum256(chunk))
-		return nil
-	})
-	handleError(err)
-}
-````
-
-Now let's say you want to process a file stream part by part. We configure the chunker in stream mode and keep the
-same options as before. For the sake of simplicity, we simulate the file stream by creating 
-smaller part before splitting them into chunk of 32kb average size.
-````go
-package main
-
-import (
-	"bytes"
-	"context"
-	"crypto/sha256"
-	"fmt"
-	"github.com/tigerwill90/fastcdc"
-	"io"
-	"os"
-)
-
-func main() {
-	file, err := os.Open("fixtures/SekienAkashita.jpg")
-	handleError(err)
-	defer file.Close()
-
-	chunker, err := fastcdc.NewChunker(context.Background(), fastcdc.WithStreamMode(), fastcdc.With32kChunks())
-	handleError(err)
-
-	buf := make([]byte, 3*65_536)
-	for {
-		n, err := file.Read(buf)
-		if err != nil {
-			if err == io.EOF {
-				break
-			}
-			handleError(err)
-		}
-		err = chunker.Split(bytes.NewReader(buf[:n]), func(offset, length uint, chunk []byte) error {
-			// the chunk is only valid in the callback, copy it for later use
-			fmt.Printf("offset: %d, length: %d, sum: %x\n", offset, length, sha256.Sum256(chunk))
-			return nil
-		})
-		handleError(err)
+	chunker, err := fastcdc.NewChunker(fastcdc.With32kChunks())
+	if err != nil {
+		panic(err)
 	}
 
-	err = chunker.Finalize(func(offset, length uint, chunk []byte) error {
-		// the chunk is only valid in the callback, copy it for later use
-		fmt.Printf("offset: %d, length: %d, sum: %x\n", offset, length, sha256.Sum256(chunk))
-		return nil
-	})
-	handleError(err)
+	for chunk, err := range chunker.Chunks(file) {
+		if err != nil {
+			panic(err)
+		}
+		// the chunk is only valid for this iteration step, copy it for later use
+		fmt.Printf("offset: %d, length: %d, sum: %x\n", chunk.Offset, len(chunk.Data), sha256.Sum256(chunk.Data))
+	}
 }
 ````
 
+The chunker can be reused for another stream once the previous iteration is over, and keeps its internal buffer
+from one stream to the next.
+
 ### Benchmark
-Setup: Intel Core i9-9900k, Linux Mint 20 Ulyana.
+Setup: Apple M4 Max, macOS.
 ````
-Benchmark16kChunks-16           100	  11420464 ns/op	2938.10 MB/s	     128 B/op	       2 allocs/op
-Benchmark32kChunks-16            97	  11909758 ns/op	2817.39 MB/s	     129 B/op	       2 allocs/op
-Benchmark64kChunks-16            94	  12078983 ns/op	2777.92 MB/s	     130 B/op	       2 allocs/op
-Benchmark16kChunksStream-16      90	  12238603 ns/op	2741.69 MB/s	   25387 B/op	     513 allocs/op
-Benchmark32kChunksStream-16      92	  12791432 ns/op	2623.20 MB/s	   25371 B/op	     513 allocs/op
-Benchmark64kChunksStream-16      87	  13152427 ns/op	2551.20 MB/s	   25414 B/op	     513 allocs/op
+Benchmark16kChunks-16    140    8518032 ns/op    3939.22 MB/s    0 B/op    0 allocs/op
+Benchmark32kChunks-16    136    8772900 ns/op    3824.78 MB/s    0 B/op    0 allocs/op
+Benchmark64kChunks-16    136    8788513 ns/op    3817.99 MB/s    0 B/op    0 allocs/op
 ````
 
 ### Invariants
 FastCDC will ensure that all chunks meet your minimum and maximum chunk size requirement, except for the last chunk which can
-be smaller than the minimum. In addition, whether you use this package in streaming or normal mode, it will always produce the same
-chunk for identical input as long as the configuration remain the same (except for the internal buffer size which has no impact 
-on the chunk output). Finally, all custom input are validated when creating the chunker.
+be smaller than the minimum. The chunking is deterministic: identical input with an identical chunk size configuration always
+produces identical chunks, whatever the internal buffer size or the read pattern of the reader (a network stream delivering
+one byte at a time and an in-memory reader produce the same chunks). Finally, all custom input are validated when creating
+the chunker.
 
 ### Other implementations
 - [ronomon/deduplication](https://github.com/ronomon/deduplication)

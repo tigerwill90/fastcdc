@@ -1,14 +1,16 @@
 package fastcdc
 
 import (
-	"bytes"
-	"context"
 	"errors"
 	"fmt"
 	"io"
+	"iter"
 	"math"
+	"sync/atomic"
 )
 
+// Bounds within which the chunk size configuration must fit.
+// They are enforced by NewChunker.
 const (
 	MinimumMin uint = 64
 	MinimumMax uint = 67_108_864
@@ -18,29 +20,36 @@ const (
 	MaximumMax uint = 1_073_741_824
 )
 
-type FastCDC struct {
-	buffer            []byte
-	carry             uint
-	realOffset        uint
-	offset            uint
-	minSize           uint
-	avgSize           uint
-	maxSize           uint
-	maskS             uint
-	maskL             uint
-	previousBytesRead uint
-	streamMode        bool
-	firstCall         bool
-	ctx               context.Context
-}
-
 var (
-	ErrInvalidChunksSizePoint = errors.New("invalid chunks size")
-	ErrInvalidBufferLength    = errors.New("invalid buffer length")
+	ErrInvalidChunkSize  = errors.New("invalid chunk size")
+	ErrInvalidBufferSize = errors.New("invalid buffer size")
 )
 
-// NewChunker return a cancelable blazing fast chunker
-func NewChunker(ctx context.Context, opts ...Option) (*FastCDC, error) {
+// Chunk is a single chunk of the input stream.
+type Chunk struct {
+	// Offset is the position of the chunk in the input stream.
+	Offset int64
+	// Data is the chunk content. It aliases the chunker's internal
+	// buffer and is only valid for the current iteration. Copy
+	// it for later use.
+	Data []byte
+}
+
+// Chunker splits a stream into content-defined chunks. Identical input
+// with an identical chunk size configuration always produces identical
+// chunks, whatever the buffer size or the read pattern of the reader.
+type Chunker struct {
+	buffer  []byte
+	minSize uint
+	avgSize uint
+	maxSize uint
+	maskS   uint64
+	maskL   uint64
+	busy    atomic.Bool
+}
+
+// NewChunker returns a blazing fast chunker.
+func NewChunker(opts ...Option) (*Chunker, error) {
 	config := defaultConfig()
 
 	for _, opt := range opts {
@@ -52,265 +61,176 @@ func NewChunker(ctx context.Context, opts ...Option) (*FastCDC, error) {
 	}
 
 	const (
-		errMinMsg = "chunks size must be at least"
-		errMaxMsg = "chunks size must be equal or lesser than"
+		errMinMsg = "chunk size must be at least"
+		errMaxMsg = "chunk size must be equal or lesser than"
 	)
 
 	if config.minSize < MinimumMin {
-		return nil, fmt.Errorf("the minimum %s %d: %w", errMinMsg, MinimumMin, ErrInvalidChunksSizePoint)
+		return nil, fmt.Errorf("the minimum %s %d: %w", errMinMsg, MinimumMin, ErrInvalidChunkSize)
 	}
 	if config.minSize > MinimumMax {
-		return nil, fmt.Errorf("the minimum %s %d: %w", errMaxMsg, MinimumMax, ErrInvalidChunksSizePoint)
+		return nil, fmt.Errorf("the minimum %s %d: %w", errMaxMsg, MinimumMax, ErrInvalidChunkSize)
 	}
 	if config.avgSize < AverageMin {
-		return nil, fmt.Errorf("the average %s %d: %w", errMinMsg, AverageMin, ErrInvalidChunksSizePoint)
+		return nil, fmt.Errorf("the average %s %d: %w", errMinMsg, AverageMin, ErrInvalidChunkSize)
 	}
 	if config.avgSize > AverageMax {
-		return nil, fmt.Errorf("the average %s %d: %w", errMaxMsg, AverageMax, ErrInvalidChunksSizePoint)
+		return nil, fmt.Errorf("the average %s %d: %w", errMaxMsg, AverageMax, ErrInvalidChunkSize)
 	}
 	if config.maxSize < MaximumMin {
-		return nil, fmt.Errorf("the maximum %s %d: %w", errMinMsg, MaximumMin, ErrInvalidChunksSizePoint)
+		return nil, fmt.Errorf("the maximum %s %d: %w", errMinMsg, MaximumMin, ErrInvalidChunkSize)
 	}
 	if config.maxSize > MaximumMax {
-		return nil, fmt.Errorf("the maximum %s %d: %w", errMaxMsg, MaximumMax, ErrInvalidChunksSizePoint)
+		return nil, fmt.Errorf("the maximum %s %d: %w", errMaxMsg, MaximumMax, ErrInvalidChunkSize)
 	}
 	if config.bufferSize < config.maxSize {
-		return nil, fmt.Errorf("the buffer size must be greater or equal than the maximum cutting point (%d): %w", config.maxSize, ErrInvalidBufferLength)
+		return nil, fmt.Errorf("the buffer size must be greater or equal than the maximum chunk size (%d): %w", config.maxSize, ErrInvalidBufferSize)
 	}
 	if config.minSize >= config.avgSize {
-		return nil, fmt.Errorf("the minimum chunks size must be smaller than the average: %w", ErrInvalidChunksSizePoint)
+		return nil, fmt.Errorf("the minimum chunk size must be smaller than the average: %w", ErrInvalidChunkSize)
 	}
 	if config.maxSize <= config.avgSize {
-		return nil, fmt.Errorf("the maximum chunks size must be bigger than the average: %w", ErrInvalidChunksSizePoint)
+		return nil, fmt.Errorf("the maximum chunk size must be bigger than the average: %w", ErrInvalidChunkSize)
 	}
 	if config.maxSize-config.minSize <= config.avgSize {
-		return nil, fmt.Errorf("maximum - minimum chunks size must be bigger than the average chunk size: %w", ErrInvalidChunksSizePoint)
-	}
-
-	var bufferSize uint
-	if remaining := config.bufferSize % config.maxSize; remaining == 0 {
-		bufferSize = config.bufferSize
-	} else {
-		// Correct the buffer size to be a multiple of max size.
-		// This guarantees that the chunks will always have the
-		// same size regardless of the size of the buffer.
-		bufferSize = config.bufferSize + config.maxSize - remaining
+		return nil, fmt.Errorf("maximum - minimum chunk size must be bigger than the average chunk size: %w", ErrInvalidChunkSize)
 	}
 
 	bits := logarithm2(config.avgSize)
-	// Mask use 1 bits normalization.
-	// https://github.com/ronomon/deduplication#content-dependent-chunking
-	maskS := mask(bits + 1)
-	maskL := mask(bits - 1)
 
-	return &FastCDC{
-		buffer:     make([]byte, bufferSize),
-		minSize:    config.minSize,
-		avgSize:    config.avgSize,
-		maxSize:    config.maxSize,
-		streamMode: config.stream,
-		maskS:      maskS,
-		maskL:      maskL,
-		ctx:        ctx,
+	return &Chunker{
+		buffer:  make([]byte, config.bufferSize),
+		minSize: config.minSize,
+		avgSize: config.avgSize,
+		maxSize: config.maxSize,
+		// Masks use 1 bit normalization.
+		// https://github.com/ronomon/deduplication#content-dependent-chunking
+		maskS: mask(bits + 1),
+		maskL: mask(bits - 1),
 	}, nil
 }
 
-// ChunkFn is called by the split function when a chunk is found.
-// The chunk is only valid in the callback and must be copied for
-// later use.
-type ChunkFn func(offset, length uint, chunk []byte) error
-
-// Split take the current reader and try to find chunk of the defined average size. When a chunk is
-// found, Split call the callback function with the offset, length and chunk. Split reuse it's
-// internal buffer, thereby the chunk is only valid within the callback. For later use, you most perform a copy value
-// of the chunk. If Split is called more than once, the offset represents the position after merging
-// all input reader since a chunk can start in one buffer and end in another.
-func (f *FastCDC) Split(data io.Reader, fn ChunkFn) error {
-	if !f.streamMode && f.firstCall {
-		panic("split must not be call multiple time in regular mode, use stream mode instead")
-	}
-	return f.split(data, fn, nil)
-}
-
-// Finalize must be called at the end of the split.
-// It return the remaining chunk from the last buffer.
-// If finalize is called before split, it will panic.
-func (f *FastCDC) Finalize(fn ChunkFn) error {
-	if !f.firstCall {
-		panic("finalize most succeed a split, call split first")
-	}
-	defer func() {
-		f.offset = 0
-		f.carry = 0
-		f.realOffset = 0
-		f.previousBytesRead = 0
-		f.firstCall = false
-	}()
-
-	select {
-	case <-f.ctx.Done():
-		return f.ctx.Err()
-	default:
-	}
-
-	reader := bytes.NewReader(nil)
-	// chunk the remaining part
-	if f.streamMode {
-		if err := f.split(reader, fn, io.EOF); err != nil {
-			return err
+// Chunks returns an iterator that reads the stream and yields its chunks
+// in order. Every chunk size is within [min, max], except the last chunk
+// of the stream which can be smaller than min. On a read error, the
+// iterator yields a zero Chunk with the error and stops. The part of the
+// stream read so far but not yet chunked is dropped.
+//
+// The yielded Chunk.Data aliases the chunker's internal buffer. It is
+// only valid for the current iteration and must be copied for later
+// use.
+//
+// The chunker can be reused for another stream once the previous
+// iteration is over, but only one iteration must run at a time.
+func (c *Chunker) Chunks(r io.Reader) iter.Seq2[Chunk, error] {
+	return func(yield func(Chunk, error) bool) {
+		if !c.busy.CompareAndSwap(false, true) {
+			panic("fastcdc: chunker already in use")
 		}
-	}
-	if f.carry > 0 {
-		return fn(f.realOffset, f.carry, f.buffer[0:f.carry])
-	}
-	return nil
-}
+		defer c.busy.Store(false)
 
-func (f *FastCDC) split(data io.Reader, fn ChunkFn, eof error) error {
-	f.firstCall = true
-	for {
-		select {
-		case <-f.ctx.Done():
-			return f.ctx.Err()
-		default:
-		}
-
-		// Fill the buffer with data but do not erase an eventual carry
-		bytesRead, err := data.Read(f.buffer[f.carry+f.previousBytesRead:])
-		if err != nil && err != io.EOF {
-			return err
-		}
-
-		if err == io.EOF && f.previousBytesRead == 0 {
-			return nil
-		}
-
-		// When finalize is called, we pass EOF to indicate that their is no more data.
-		// It's robust because and empty part during a stream will not trigger the chunking
-		// process and break the deterministic chunking judgement.
-		if f.streamMode {
-			// Return until the internal buffer is completely filled or until EOF
-			remaining := uint(len(f.buffer)) - f.carry - f.previousBytesRead - uint(bytesRead)
-			if remaining != 0 && eof != io.EOF {
-				f.previousBytesRead += uint(bytesRead)
-				return nil
-			}
-		}
-		// byteReadWithCarry is the real upper bound up to which we must iterate
-		bytesReadWithCarry := uint(bytesRead) + f.carry + f.previousBytesRead
-		f.offset = f.carry
-		f.previousBytesRead = 0
-
-		// Find chunk for the current buffer
-		for f.offset < bytesReadWithCarry {
-			breakpoint := f.breakpoint(f.buffer[f.offset:bytesReadWithCarry])
-			if breakpoint != 0 {
-				endOffset := breakpoint + f.offset
-				// If there is a carry, the length need to be calculate form the beginning of the buffer
-				chunkLength := endOffset - (f.offset - f.carry)
-				chunk := f.buffer[f.offset-f.carry : endOffset]
-				if err := fn(f.realOffset, chunkLength, chunk); err != nil {
-					return err
+		var (
+			offset int64 // stream position of buffer[0]
+			start  uint  // start of the current chunk in the buffer
+			end    uint  // end of the buffered data
+			eof    bool
+		)
+		for {
+			if !eof && end-start < c.maxSize {
+				// Move the pending bytes at the front of the buffer, then
+				// fill it completely. The chunker only looks for a cut point
+				// with at least max size bytes ahead, or on end of stream,
+				// so the read pattern of the reader cannot influence the
+				// chunk boundaries.
+				copy(c.buffer, c.buffer[start:end])
+				offset += int64(start)
+				end -= start
+				start = 0
+				for end < uint(len(c.buffer)) {
+					n, err := r.Read(c.buffer[end:])
+					end += uint(n)
+					if err == io.EOF {
+						eof = true
+						break
+					}
+					if err != nil {
+						yield(Chunk{}, err)
+						return
+					}
 				}
-				f.realOffset += breakpoint + f.carry
-				f.carry = 0
-				f.offset = endOffset
-			} else {
-				previousCarry := f.carry
-				currentCarry := bytesReadWithCarry - f.offset
-				f.carry += currentCarry
-
-				// copy the part of the buffer where we can't find
-				// a chunk to the buffer from the previous carry position
-				copy(f.buffer[previousCarry:previousCarry+currentCarry], f.buffer[f.offset:f.offset+currentCarry])
-				break
 			}
+
+			if start == end {
+				return
+			}
+
+			length := c.breakpoint(c.buffer[start:end])
+			if length == 0 {
+				// No cut point in the pending bytes means this is the
+				// last chunk of the stream.
+				length = end - start
+			}
+			if !yield(Chunk{Offset: offset + int64(start), Data: c.buffer[start : start+length]}, nil) {
+				return
+			}
+			start += length
 		}
 	}
 }
 
-// Breakpoint return the next chunk breakpoint on the buffer.
-// If there is no breakpoint found, it return 0.
-func (f *FastCDC) breakpoint(buffer []byte) uint {
-	// if there is bytes carried from the last breakpoint call,
-	// reduce the expected chunk size to match the required size.
-	minSize := min(f.minSize, f.carry, 1)
-	avgSize := min(f.avgSize, f.carry, 1)
-	maxSize := min(f.maxSize, f.carry, 1)
+// breakpoint returns the size of the next chunk in the window, or 0 when
+// no cut point can be found before the end of the window.
+func (c *Chunker) breakpoint(window []byte) uint {
+	length := uint(len(window))
 
-	bufferLength := uint(len(buffer))
-
-	var hash uint = 0
-
-	// Sub-minimum chunk cut-point skipping
-	if bufferLength <= minSize {
+	// Sub-minimum chunk cut-point skipping.
+	if length <= c.minSize {
 		return 0
 	}
 
-	// Set to min size since we do not want to
-	// find a breakpoint bellow the min size
-	breakPoint := minSize
-
-	// If the buffer length is bigger than the maxSize
-	// use the max size as buffer length. Over time
-	// the buffer will become smaller and smaller until
-	// it's not possible to find a new chunk or until
-	// the buffer length is exactly equals to the maxSize
-	if bufferLength > maxSize {
-		bufferLength = maxSize
+	// Never look past max size bytes. Over that limit the chunk is cut
+	// at max size whatever its content.
+	if length > c.maxSize {
+		length = c.maxSize
 	}
 
-	normalSize := centerSize(avgSize, minSize, bufferLength)
+	normalSize := centerSize(c.avgSize, c.minSize, length)
+
+	var hash uint64
+	cut := c.minSize
 
 	// Start by using the "harder" chunking judgement to find
 	// chunks that run smaller than the desired normal size.
-	for breakPoint < normalSize {
-		index := uint(buffer[breakPoint])
-		breakPoint += 1
-		hash = (hash >> 1) + table[index]
-		if hash&f.maskS == 0 {
-			return breakPoint
+	for cut < normalSize {
+		hash = (hash >> 1) + table[window[cut]]
+		cut++
+		if hash&c.maskS == 0 {
+			return cut
 		}
 	}
 
 	// Fall back to using the "easier" chunking judgement to find chunks
 	// that run larger than the desired normal size but never bigger than
-	// the maxSize.
-	for breakPoint < bufferLength {
-		index := uint(buffer[breakPoint])
-		breakPoint += 1
-		hash = (hash >> 1) + table[index]
-		if hash&f.maskL == 0 {
-			return breakPoint
+	// the max size.
+	for cut < length {
+		hash = (hash >> 1) + table[window[cut]]
+		cut++
+		if hash&c.maskL == 0 {
+			return cut
 		}
 	}
 
-	// We are unable to find an end offset chunk with the chunking judgement
-	// At this point breakPoint == bufferLength
-	// If the buffer is exactly of the size of the max chunk size, the chunk reach
-	// the max size allowed and we should emit.
-	// It's also ensure than the carry is never bigger than the max size.
-	if breakPoint == maxSize {
-		return breakPoint
+	// We are unable to find a cut point with the chunking judgement.
+	// If the window is exactly max size long, the chunk reaches the max
+	// size allowed and must be cut.
+	if cut == c.maxSize {
+		return cut
 	}
-
-	// If the breakPoint is < maxSize, the buffer we got is too small to find a chunk
-	// and we should try with a bigger buffer.
 	return 0
 }
 
-// min reduce a cut-point with the carry bytes length.
-// If the carry is >= than the cut-point, min return the
-// min cut-point.
-func min(point, carry, min uint) uint {
-	if carry < point {
-		return point - carry
-	}
-	return min
-}
-
-// Find the middle of the desired chunk size. This is what the
-// FastCDC paper refer as "normal size", but with a more adaptive
+// centerSize finds the middle of the desired chunk size. This is what the
+// FastCDC paper refers as "normal size", but with a more adaptive
 // threshold based on a combination of average and minimum chunk size
 // to decide the pivot point at which to switch masks.
 // https://github.com/ronomon/deduplication#content-dependent-chunking
@@ -326,27 +246,27 @@ func centerSize(average, minimum, sourceSize uint) uint {
 	return size
 }
 
-// Integer division than rounds up instead of down.
+// Integer division that rounds up instead of down.
 func ceilDiv(x, y uint) uint {
 	return (x + y - 1) / y
 }
 
-func mask(bits uint) uint {
+func mask(bits uint) uint64 {
 	if bits < 1 {
 		panic("bits too low")
 	}
 	if bits > 31 {
 		panic("bits too high")
 	}
-	return uint(math.Pow(2, float64(bits)) - 1)
+	return 1<<bits - 1
 }
 
-// Base 2 logarithm
+// Base 2 logarithm, rounded to the nearest integer.
 func logarithm2(value uint) uint {
 	return uint(math.Round(math.Log2(float64(value))))
 }
 
-var table = [256]uint{
+var table = [256]uint64{
 	1553318008, 574654857, 759734804, 310648967, 1393527547, 1195718329,
 	694400241, 1154184075, 1319583805, 1298164590, 122602963, 989043992,
 	1918895050, 933636724, 1369634190, 1963341198, 1565176104, 1296753019,
