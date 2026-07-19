@@ -1,7 +1,6 @@
 [![PkgGoDev](https://pkg.go.dev/badge/github.com/tigerwill90/fastcdc/v2?tab=doc)](https://pkg.go.dev/github.com/tigerwill90/fastcdc/v2?tab=doc)
 [![Build Status](https://github.com/tigerwill90/fastcdc/actions/workflows/test.yml/badge.svg?branch=master)](https://github.com/tigerwill90/fastcdc/actions/workflows/test.yml)
 [![codecov](https://codecov.io/gh/tigerwill90/fastcdc/branch/master/graph/badge.svg)](https://codecov.io/gh/tigerwill90/fastcdc)
-[![Go Report Card](https://goreportcard.com/badge/github.com/tigerwill90/fastcdc/v2)](https://goreportcard.com/report/github.com/tigerwill90/fastcdc/v2)
 # FastCDC
 This package implements the FastCDC content defined chunking algorithm based on the gear-rolling hash and implements optimizations proposed by Wen Xia et al. in their 2016 paper [FastCDC:
 a Fast and Efficient Content-Defined Chunking Approach for Data Deduplication](https://www.usenix.org/system/files/conference/atc16/atc16-paper-xia.pdf).
