@@ -1,5 +1,5 @@
 [![PkgGoDev](https://pkg.go.dev/badge/github.com/tigerwill90/fastcdc/v2?tab=doc)](https://pkg.go.dev/github.com/tigerwill90/fastcdc/v2?tab=doc)
-[![Build Status](https://github.com/tigerwill90/fastcdc/actions/workflows/test.yml/badge.svg)](https://github.com/tigerwill90/fastcdc/actions/workflows/test.yml)
+[![Build Status](https://github.com/tigerwill90/fastcdc/actions/workflows/test.yml/badge.svg?branch=master)](https://github.com/tigerwill90/fastcdc/actions/workflows/test.yml)
 [![codecov](https://codecov.io/gh/tigerwill90/fastcdc/branch/master/graph/badge.svg)](https://codecov.io/gh/tigerwill90/fastcdc)
 [![Go Report Card](https://goreportcard.com/badge/github.com/tigerwill90/fastcdc/v2)](https://goreportcard.com/report/github.com/tigerwill90/fastcdc/v2)
 # FastCDC
