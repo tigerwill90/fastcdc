@@ -17,7 +17,8 @@ is based on optimizations and variations introduced by [ronomon/deduplication](h
 
 ### Example
 
-In this example, the chunker is configured to split the given file into chunk of an average of 32kb.
+In this example, the chunker splits the given file with the default configuration, which targets an average
+chunk size of 64kb. This is the recommended setting for optimal end-to-end deduplication and compression.
 ````go
 package main
 
@@ -36,7 +37,7 @@ func main() {
 	}
 	defer file.Close()
 
-	c, err := fastcdc.NewChunker(fastcdc.With32kChunks())
+	c, err := fastcdc.NewChunker()
 	if err != nil {
 		panic(err)
 	}
