@@ -198,13 +198,15 @@ func (c *Chunker) breakpoint(window []byte) uint {
 
 	var hash uint64
 	cut := c.minSize
+	maskS := c.maskS
+	maskL := c.maskL
 
 	// Start by using the "harder" chunking judgement to find
 	// chunks that run smaller than the desired normal size.
 	for cut < normalSize {
 		hash = (hash >> 1) + table[window[cut]]
 		cut++
-		if hash&c.maskS == 0 {
+		if hash&maskS == 0 {
 			return cut
 		}
 	}
@@ -215,7 +217,7 @@ func (c *Chunker) breakpoint(window []byte) uint {
 	for cut < length {
 		hash = (hash >> 1) + table[window[cut]]
 		cut++
-		if hash&c.maskL == 0 {
+		if hash&maskL == 0 {
 			return cut
 		}
 	}
