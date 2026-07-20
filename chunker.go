@@ -27,12 +27,12 @@ var (
 
 // Chunk is a single chunk of the input stream.
 type Chunk struct {
-	// Offset is the position of the chunk in the input stream.
-	Offset int64
 	// Data is the chunk content. It aliases the chunker's internal
 	// buffer and is only valid for the current iteration. Copy
 	// it for later use.
 	Data []byte
+	// Offset is the position of the chunk in the input stream.
+	Offset int64
 }
 
 // Chunker splits a stream into content-defined chunks. Identical input

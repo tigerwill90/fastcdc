@@ -4,17 +4,49 @@ on:
   push:
     branches: [master]
   pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - name: Check out code
+        uses: actions/checkout@v6
         with:
-          go-version: '1.26.x'
-      - run: go vet ./...
-      - run: go test -race -timeout 10m -coverprofile=coverage.txt -covermode=atomic ./...
-      - uses: codecov/codecov-action@v5
+          persist-credentials: false
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
         with:
-          files: coverage.txt
+          go-version: '>=1.26'
+          cache: false
+
+      - name: Run tests
+        run: go test -race -timeout 10m -coverprofile=coverage.txt -covermode=atomic ./...
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          fail_ci_if_error: true
+          files: ./coverage.txt
+          token: ${{ secrets.CODECOV_TOKEN }}
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: '>=1.26'
+          cache: false
+
+      - name: Run linter
+        uses: golangci/golangci-lint-action@v9

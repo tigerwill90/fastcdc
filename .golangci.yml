@@ -1,0 +1,34 @@
+version: "2"
+linters:
+  default: none
+  enable:
+    - errcheck
+    - gosec
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+  settings:
+    govet:
+      enable-all: true
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    rules:
+      - linters:
+          - errcheck
+          - gosec
+          - govet
+          - ineffassign
+          - staticcheck
+          - unused
+        path: _test\.go
+formatters:
+  enable:
+    - gofmt
+  exclusions:
+    generated: lax
