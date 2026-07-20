@@ -11,9 +11,9 @@ type config struct {
 
 func defaultConfig() *config {
 	return &config{
-		minSize: 32_768,
+		minSize: 16_384,
 		avgSize: 65_536,
-		maxSize: 131_072,
+		maxSize: 524_288,
 	}
 }
 
@@ -40,18 +40,18 @@ func WithChunksSize(min, avg, max uint) Option {
 // With16kChunks set the 16kb average chunks size preset.
 func With16kChunks() Option {
 	return func(c *config) {
-		c.minSize = 8192
+		c.minSize = 4096
 		c.avgSize = 16_384
-		c.maxSize = 32_768
+		c.maxSize = 131_072
 	}
 }
 
 // With32kChunks set the 32kb average chunks size preset.
 func With32kChunks() Option {
 	return func(c *config) {
-		c.minSize = 16_384
+		c.minSize = 8192
 		c.avgSize = 32_768
-		c.maxSize = 65_536
+		c.maxSize = 262_144
 	}
 }
 
@@ -61,8 +61,8 @@ func With32kChunks() Option {
 // https://www.usenix.org/system/files/conference/atc12/atc12-final293.pdf
 func With64kChunks() Option {
 	return func(c *config) {
-		c.minSize = 32_768
+		c.minSize = 16_384
 		c.avgSize = 65_536
-		c.maxSize = 131_072
+		c.maxSize = 524_288
 	}
 }

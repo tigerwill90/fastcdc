@@ -41,31 +41,29 @@ var sekienGoldens = map[string]struct {
 }{
 	"16kChunks": {
 		Preset:  With16kChunks(),
-		MaxSize: 32_768,
+		MaxSize: 131_072,
 		Want: []chunkInfo{
 			{0, 22366},
-			{22366, 8282},
-			{30648, 16303},
+			{22366, 10491},
+			{32857, 14094},
 			{46951, 18696},
-			{65647, 32768},
-			{98415, 11051},
+			{65647, 43819},
 		},
 	},
 	"32kChunks": {
 		Preset:  With32kChunks(),
-		MaxSize: 65_536,
+		MaxSize: 262_144,
 		Want: []chunkInfo{
 			{0, 32857},
-			{32857, 16408},
-			{49265, 60201},
+			{32857, 32790},
+			{65647, 43819},
 		},
 	},
 	"64kChunks": {
 		Preset:  With64kChunks(),
-		MaxSize: 131_072,
+		MaxSize: 524_288,
 		Want: []chunkInfo{
-			{0, 32857},
-			{32857, 76609},
+			{0, 109466},
 		},
 	},
 }
@@ -129,18 +127,18 @@ func Example_basic() {
 	handleError(err)
 	defer file.Close()
 
-	chunker, err := NewChunker(With32kChunks())
+	c, err := NewChunker(With32kChunks())
 	handleError(err)
 
-	for chunk, err := range chunker.Chunks(file) {
+	for chunk, err := range c.Chunks(file) {
 		handleError(err)
 		// the chunk is only valid for this iteration step, copy it for later use
 		fmt.Printf("offset: %d, length: %d, sum: %x\n", chunk.Offset, len(chunk.Data), sha256.Sum256(chunk.Data))
 	}
 	// Output:
 	// offset: 0, length: 32857, sum: 5a80871bad4588c7278d39707fe68b8b174b1aa54c59169d3c2c72f1e16ef46d
-	// offset: 32857, length: 16408, sum: 13f6a4c6d42df2b76c138c13e86e1379c203445055c2b5f043a5f6c291fa520d
-	// offset: 49265, length: 60201, sum: 0fe7305ba21a5a5ca9f89962c5a6f3e29cd3e2b36f00e565858e0012e5f8df36
+	// offset: 32857, length: 32790, sum: d3868199f4275cde4c235d5a3dbf7ef7a81594007b3f80db30861607ef10ea0d
+	// offset: 65647, length: 43819, sum: d6347a2e5bf586d42f2d80559d4f4a2bf160dce8f77eede023ad2314856f3086
 }
 
 func TestLogarithm2(t *testing.T) {
@@ -440,9 +438,9 @@ func TestRandomInput(t *testing.T) {
 		MaxSize int
 		Opt     Option
 	}{
-		{"16kChunks", 8192, 32_768, With16kChunks()},
-		{"32kChunks", 16_384, 65_536, With32kChunks()},
-		{"64kChunks", 32_768, 131_072, With64kChunks()},
+		{"16kChunks", 4096, 131_072, With16kChunks()},
+		{"32kChunks", 8192, 262_144, With32kChunks()},
+		{"64kChunks", 16_384, 524_288, With64kChunks()},
 	}
 
 	seed := time.Now().UnixNano()

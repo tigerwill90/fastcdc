@@ -36,12 +36,12 @@ func main() {
 	}
 	defer file.Close()
 
-	chunker, err := fastcdc.NewChunker(fastcdc.With32kChunks())
+	c, err := fastcdc.NewChunker(fastcdc.With32kChunks())
 	if err != nil {
 		panic(err)
 	}
 
-	for chunk, err := range chunker.Chunks(file) {
+	for chunk, err := range c.Chunks(file) {
 		if err != nil {
 			panic(err)
 		}
@@ -57,10 +57,17 @@ from one stream to the next.
 ### Benchmark
 Setup: Apple M4 Max, macOS.
 ````
-Benchmark16kChunks-16    140    8518032 ns/op    3939.22 MB/s    0 B/op    0 allocs/op
-Benchmark32kChunks-16    136    8772900 ns/op    3824.78 MB/s    0 B/op    0 allocs/op
-Benchmark64kChunks-16    136    8788513 ns/op    3817.99 MB/s    0 B/op    0 allocs/op
+Benchmark16kChunks-16    88    13343829 ns/op    2514.60 MB/s    0 B/op    0 allocs/op
+Benchmark32kChunks-16    90    13147409 ns/op    2552.17 MB/s    0 B/op    0 allocs/op
+Benchmark64kChunks-16    91    13188992 ns/op    2544.12 MB/s    0 B/op    0 allocs/op
 ````
+
+### Upgrading from v1
+The chunk size presets changed in v2: `With16k/32k/64kChunks` and the default configuration now use
+`min = avg/4, max = avg×8` and therefore produce different chunks than
+[v1](https://github.com/tigerwill90/fastcdc/tree/v1.2.2). To reproduce a v1 preset, configure the
+chunker explicitly: `WithChunksSize(8192, 16_384, 32_768)` (16k), `WithChunksSize(16_384, 32_768, 65_536)`
+(32k) or `WithChunksSize(32_768, 65_536, 131_072)` (64k).
 
 ### Invariants
 FastCDC will ensure that all chunks meet your minimum and maximum chunk size requirement, except for the last chunk which can
