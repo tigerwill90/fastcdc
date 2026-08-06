@@ -52,8 +52,7 @@ func main() {
 }
 ````
 
-The chunker can be reused for another stream once the previous iteration is over, and keeps its internal buffer
-from one stream to the next.
+The chunker can be reused for another stream once the previous iteration is over.
 
 ### Benchmark
 Setup: Apple M4 Max, macOS.
