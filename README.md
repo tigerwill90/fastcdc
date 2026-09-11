@@ -18,7 +18,7 @@ is based on optimizations and variations introduced by [ronomon/deduplication](h
 ### Example
 
 In this example, the chunker splits the given file with the default configuration, which targets an average
-chunk size of 64kb. This is the recommended setting for optimal end-to-end deduplication and compression.
+chunk size of 64kb.
 ````go
 package main
 
