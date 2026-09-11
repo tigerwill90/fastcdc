@@ -204,7 +204,7 @@ func TestCenterSize(t *testing.T) {
 func TestMask(t *testing.T) {
 	tests := []struct {
 		Bits   uint
-		Result uint64
+		Result uint
 	}{
 		{24, 16_777_215},
 		{16, 65535},

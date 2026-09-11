@@ -43,8 +43,8 @@ type Chunker struct {
 	minSize uint
 	avgSize uint
 	maxSize uint
-	maskS   uint64
-	maskL   uint64
+	maskS   uint
+	maskL   uint
 	busy    atomic.Bool
 }
 
@@ -196,7 +196,7 @@ func (c *Chunker) breakpoint(window []byte) uint {
 
 	normalSize := centerSize(c.avgSize, c.minSize, length)
 
-	var hash uint64
+	var hash uint
 	cut := c.minSize
 	maskS := c.maskS
 	maskL := c.maskL
@@ -253,7 +253,7 @@ func ceilDiv(x, y uint) uint {
 	return (x + y - 1) / y
 }
 
-func mask(bits uint) uint64 {
+func mask(bits uint) uint {
 	if bits < 1 {
 		panic("bits too low")
 	}
@@ -268,7 +268,7 @@ func logarithm2(value uint) uint {
 	return uint(math.Round(math.Log2(float64(value))))
 }
 
-var table = [256]uint64{
+var table = [256]uint{
 	1553318008, 574654857, 759734804, 310648967, 1393527547, 1195718329,
 	694400241, 1154184075, 1319583805, 1298164590, 122602963, 989043992,
 	1918895050, 933636724, 1369634190, 1963341198, 1565176104, 1296753019,
